@@ -1,8 +1,12 @@
 import Layout from '../layouts/main-layout'
 
-const HomePage = () => {
+interface AboutPageProps {
+  description: string
+}
+
+const AboutPage = ({ description }: AboutPageProps) => {
   return (
-    <Layout title="About">
+    <Layout title="About" description={description}>
       <h1>About</h1>
       <p>
         It seems that my focused roll finally finished with my net. Can you believe that several muffled republics finally
@@ -26,4 +30,4 @@ const HomePage = () => {
   )
 }
 
-export default HomePage
+export default AboutPage

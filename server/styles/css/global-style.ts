@@ -58,7 +58,6 @@ export default {
   },
   '.card': {
     backgroundColor: colors.bgSurface,
-    border: delimiterBorder,
     borderRadius: vars.borderRadiusMain,
     padding: vars.spacingMain
   },

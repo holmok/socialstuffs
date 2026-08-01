@@ -3,6 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import * as m from '@middleware/index'
 import Routes from '@routes/index'
 import { Hono } from 'hono'
+import { compress } from 'hono/compress'
 import type { Logger } from 'pino'
 import type { Config } from '@/config'
 
@@ -21,6 +22,7 @@ export function createApp(config: Config, logger: Logger) {
   app.use(m.configContext(config))
   app.use(m.loggerContext(logger))
   app.use(m.apiContext(api))
+  app.use(compress())
 
   Routes(app, logger)
   app.use('/*', m.staticCache(config))
