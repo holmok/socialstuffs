@@ -1,7 +1,10 @@
 const Navigation = () => {
   return (
-    <nav>
-      <ul>
+    <nav aria-label="Main">
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">
+        &#8801;
+      </button>
+      <ul id="site-nav">
         <li>
           <a href="/">Home</a>
         </li>

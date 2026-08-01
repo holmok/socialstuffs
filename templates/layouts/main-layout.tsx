@@ -1,4 +1,5 @@
-import Navigation from '@components/navigation'
+import Footer from '@components/footer'
+import Header from '@components/header'
 import getStyle, { type style } from '@styles/index'
 import { raw } from 'hono/html'
 import type { FC, PropsWithChildren } from 'hono/jsx'
@@ -18,17 +19,20 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
       <html lang="en">
         <head>
           <meta charSet="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>Bun + Hono + HTMX / {title}</title>
           <style>{styleString}</style>
           <script src="/js/htmx.min.js"></script>
+          <script src="/js/nav.js" defer></script>
           <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
           <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
           <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
           <link rel="manifest" href="/site.webmanifest" />
         </head>
-        <body>
-          <Navigation />
+        <body id="top">
+          <Header />
           <main>{children}</main>
+          <Footer />
         </body>
       </html>
     </>
