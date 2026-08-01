@@ -1,0 +1,7 @@
+export const bgMain = '#0f172a'
+export const bgSurface = '#1e293b'
+export const fgMain = '#e2e8f0'
+export const fgMuted = '#94a3b8'
+export const accentBlue = '#38bdf8'
+export const accentOrange = '#f97316'
+export const borderColor = '#334155'

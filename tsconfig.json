@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./server/*"],
+      "@routes/*": ["./server/routes/*"],
+      "@api/*": ["./server/api/*"],
+      "@middleware/*": ["./server/middleware/*"],
+      "@templates/*": ["./templates/*"],
+      "@components/*": ["./templates/components/*"],
+      "@pages/*": ["./templates/pages/*"],
+      "@styles/*": ["./server/styles/*"]
+    },
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["bun"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx"
+  }
+}

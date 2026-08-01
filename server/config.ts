@@ -1,0 +1,60 @@
+import type pino from 'pino'
+import { z } from 'zod'
+
+const APP_NAME = 'bun-hono-htmx'
+
+const envSchema = z.object({
+  PORT: z
+    .string()
+    .default('3000')
+    .transform((val) => Number(val)),
+  HOST: z.string().default('localhost'),
+  NODE_ENV: z.enum(['development', 'production']).default('development'),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  LOG_NAME: z.string().default(APP_NAME)
+})
+
+export type Config = ReturnType<typeof LoadConfig>
+
+export default function LoadConfig() {
+  const env = envSchema.parse(process.env)
+
+  const devPinoOptions: pino.LoggerOptions = {
+    name: env.LOG_NAME,
+    level: 'debug',
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        singleLine: true,
+        messageKey: 'msg',
+        levelFirst: true,
+        ignore: 'pid,hostname,req.headers,req.remoteAddress,req.remotePort',
+        translateTime: true
+      }
+    }
+  }
+
+  const productionPinoOptions: pino.LoggerOptions = {
+    name: env.LOG_NAME,
+    level: env.LOG_LEVEL,
+    formatters: {
+      level(label) {
+        return { level: label }
+      }
+    }
+  }
+
+  return {
+    server: {
+      port: env.PORT,
+      host: env.HOST
+    },
+    mode: {
+      isDev: env.NODE_ENV === 'development',
+      isProd: env.NODE_ENV === 'production',
+      env: env.NODE_ENV
+    },
+    pino: env.NODE_ENV === 'development' ? devPinoOptions : productionPinoOptions
+  }
+}
