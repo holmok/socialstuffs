@@ -7,10 +7,12 @@ import { serveStatic } from 'hono/bun'
 import { compress } from 'hono/compress'
 import type { Logger } from 'pino'
 import type { Config } from '@/config'
+import type { AuthContext } from '@/middleware/auth-middleware'
 
 declare module 'hono' {
   interface ContextVariableMap {
     db: ReturnType<typeof data>
+    auth: AuthContext
     api: API
     logger: Logger
     config: Config

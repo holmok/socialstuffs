@@ -1,10 +1,11 @@
-import SignUpForm from '@components/signup-form'
 import AboutPage from '@pages/about'
 import AccountValidationFailurePage from '@pages/account-validation-failure'
 import AccountValidationSuccessPage from '@pages/account-validation-success'
 import HomePage from '@pages/home'
 import SignInPage from '@pages/sign-in'
 import SignUpPage from '@pages/sign-up'
+import SignInForm from '@templates/components/sign-in-form'
+import SignUpForm from '@templates/components/sign-up-form'
 import type { Hono } from 'hono'
 import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
@@ -51,13 +52,23 @@ const signUpSchema = z
 
 type SignUpData = z.infer<typeof signUpSchema>
 
+const signInSchema = z.object({
+  email: z.string().min(1, 'Email is required.').max(255, 'Email must be at most 255 characters long.'),
+  password: z.string().min(1, 'Password is required.').max(255, 'Password must be at most 255 characters long.')
+})
+
+type SignInData = z.infer<typeof signInSchema>
+
 export default function PublicRoutes(app: Hono, logger: Logger) {
   logger.info('Registering public routes')
 
   app.get('/', (c) => {
+    const { auth, logger } = c.var
+    logger.debug({ user: auth.user }, 'Rendering home page with user context')
     return c.html(
       HomePage({
-        description: 'A server-rendered starter app built with Bun, Hono, and HTMX.'
+        description: 'A server-rendered starter app built with Bun, Hono, and HTMX.',
+        user: auth.user
       })
     )
   })
@@ -72,6 +83,51 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
         description: 'Sign in to the Bun + Hono + HTMX starter app.'
       })
     )
+  })
+
+  app.post('/sign-in', async (c) => {
+    const formData = await c.req.formData()
+    const form = Object.fromEntries(formData.entries()) as SignInData
+    const { data, errors } = utils.validateFormData<SignInData>(form, signInSchema)
+
+    if (Object.keys(errors).length > 0) {
+      logger.warn({ errors }, 'Validation errors on sign-in form')
+      return c.html(SignInForm({ ...data, errors }))
+    } else {
+      const { db, logger, auth } = c.var
+
+      const normalizedEmail = normalizeEmail(data.email)
+
+      try {
+        const user = await db.selectFrom('users').where('normalizedEmail', '=', normalizedEmail).selectAll().executeTakeFirst()
+
+        if (!user) {
+          logger.warn({ normalizedEmail }, 'User not found for sign-in')
+          return c.html(SignInForm({ ...data, errors: { form: ['Invalid sign in.'] } }))
+        }
+
+        const isPasswordValid = await Bun.password.verify(data.password, user.passwordHash, 'bcrypt')
+
+        if (!isPasswordValid) {
+          logger.warn({ userId: user.id }, 'Invalid password for sign-in')
+          return c.html(SignInForm({ ...data, errors: { form: ['Invalid sign in.'] } }))
+        }
+
+        await auth.setUser({
+          uid: user.uid,
+          username: user.username,
+          role: user.role,
+          status: user.status
+        })
+
+        logger.info({ userId: user.id }, 'User signed in successfully')
+
+        return utils.redirect(c, '/')
+      } catch (error) {
+        utils.logError(logger, error, 'Error during sign-in')
+        return c.html(SignInForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }))
+      }
+    }
   })
 
   app.get('/sign-up', (c) => {
@@ -153,7 +209,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
           }
         })
 
-        return c.redirect('/sign-in', 303)
+        return utils.redirect(c, '/sign-in')
       } catch (error) {
         utils.logError(logger, error, 'Error creating user')
         return c.html(SignUpForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }), 500)

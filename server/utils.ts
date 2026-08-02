@@ -2,8 +2,19 @@ import { lookup } from 'node:dns/promises'
 import net from 'node:net'
 import type data from '@data/index'
 import type { Server } from 'bun'
+import type { Context } from 'hono'
 import type { Logger } from 'pino'
 import type { z } from 'zod'
+
+export function redirect(c: Context, path: string) {
+  const isHtmx = c.req.header('HX-Request') === 'true'
+  if (isHtmx) {
+    c.header('HX-Redirect', path)
+    return c.body(null, 204)
+  } else {
+    return c.redirect(path, 303)
+  }
+}
 
 export function logError(logger: Logger, error: unknown, message: string) {
   const errorMessage = error instanceof Error ? error.message : String(error)

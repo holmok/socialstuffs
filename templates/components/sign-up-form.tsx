@@ -11,12 +11,14 @@ type SignUpFormProps = {
 
 const SignUpForm = (props: SignUpFormProps) => {
   return (
-    <form
-      className="form"
-      hx-post="/sign-up"
-      hx-target="this"
-      hx-swap="outerHTML"
-    >
+    <form className="form" hx-post="/sign-up" hx-target="this" hx-swap="outerHTML">
+      {props.errors?.form && (
+        <div className="form-errors">
+          {props.errors.form.map((error, index) => (
+            <p key={`form-error-${index}`}>{error}</p>
+          ))}
+        </div>
+      )}
       <TextInput
         id="username"
         name="username"

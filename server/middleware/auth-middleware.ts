@@ -4,9 +4,9 @@ import * as cookie from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
 import jwt from 'jsonwebtoken'
 
-type UserContext = Pick<UserData, 'uid' | 'username' | 'status' | 'role'>
+export type UserContext = Pick<UserData, 'uid' | 'username' | 'status' | 'role'>
 type User = Omit<UserData, 'passwordHash' | 'normalizedUsername' | 'normalizedEmail'>
-type AuthContext = {
+export type AuthContext = {
   user: UserContext | undefined
   getUser: () => Promise<User | undefined>
   setUser: (userContext: UserContext) => Promise<void>

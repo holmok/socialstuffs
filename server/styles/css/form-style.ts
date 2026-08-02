@@ -89,6 +89,16 @@ export default {
       fontSize: vars.fontSizeSmall,
       marginTop: vars.spacingMain
     },
+    '.form-errors': {
+      backgroundColor: colors.bgError,
+      color: colors.fgError,
+      padding: vars.spacingSmall,
+      borderRadius: vars.borderRadiusMain,
+      marginBottom: vars.spacingMain
+    },
+    '.form-errors p:last-child': {
+      marginBottom: 0
+    },
     '.form-alt': {
       textAlign: 'center',
       fontSize: vars.fontSizeSmall,

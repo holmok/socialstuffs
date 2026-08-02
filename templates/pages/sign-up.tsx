@@ -1,4 +1,4 @@
-import SignUpForm from '@templates/components/signup-form'
+import SignUpForm from '@templates/components/sign-up-form'
 import Layout from '../layouts/main-layout'
 
 interface SignUpPageProps {
