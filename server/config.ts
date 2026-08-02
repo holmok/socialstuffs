@@ -28,7 +28,11 @@ const envSchema = z.object({
   POSTMARK_TOKEN: z.string(),
   FROM_EMAIL: z.string(),
   BASE_LINK_URL: z.string().default('http://localhost:3000'),
-  BASE_IMAGE_URL: z.string().default('https://storage.googleapis.com/social-stuffs-images')
+  BASE_IMAGE_URL: z.string().default('https://storage.googleapis.com/social-stuffs-images'),
+  JWT_SECRET: z.string(),
+  COOKIE_SECRET: z.string(),
+  COOKIE_NAME_USER: z.string(),
+  COOKIE_NAME_SESSION: z.string()
 })
 
 export type Config = ReturnType<typeof LoadConfig>
@@ -69,6 +73,12 @@ export default function LoadConfig() {
   }
 
   return {
+    auth: {
+      jwtSecret: env.JWT_SECRET,
+      cookieSecret: env.COOKIE_SECRET,
+      userCookieName: env.COOKIE_NAME_USER,
+      sessionCookieName: env.COOKIE_NAME_SESSION
+    },
     baseLinkUrl: env.BASE_LINK_URL,
     baseImageUrl: env.BASE_IMAGE_URL,
     email: {

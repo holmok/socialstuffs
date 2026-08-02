@@ -28,6 +28,7 @@ export function createApp(config: Config, logger: Logger) {
   app.use(m.loggerContext(logger))
   app.use(m.dataContext(db))
   app.use(m.apiContext(api))
+  app.use(m.authenticate())
   app.use(compress())
 
   Routes(app, logger)
