@@ -37,7 +37,7 @@ export function authenticate(): MiddlewareHandler {
       user: userContext,
       async setUser(userContext: UserContext) {
         const token = jwt.sign(userContext, config.auth.jwtSecret)
-        await cookie.setSignedCookie(c, config.auth.cookieSecret, config.auth.userCookieName, token, {
+        await cookie.setSignedCookie(c, config.auth.userCookieName, token, config.auth.cookieSecret, {
           httpOnly: true,
           sameSite: 'strict'
         })
