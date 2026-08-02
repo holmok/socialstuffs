@@ -1,3 +1,4 @@
+import API from '@api/index'
 import data from '@data/index'
 import * as m from '@middleware/index'
 import Routes from '@routes/index'
@@ -10,6 +11,7 @@ import type { Config } from '@/config'
 declare module 'hono' {
   interface ContextVariableMap {
     db: ReturnType<typeof data>
+    api: API
     logger: Logger
     config: Config
   }
@@ -19,11 +21,13 @@ export function createApp(config: Config, logger: Logger) {
   logger.info('Creating Hono app')
 
   const db = data(config.poolConfig, config.dbSchema, logger)
+  const api = new API(logger, config)
   const app = new Hono()
 
   app.use(m.configContext(config))
   app.use(m.loggerContext(logger))
   app.use(m.dataContext(db))
+  app.use(m.apiContext(api))
   app.use(compress())
 
   Routes(app, logger)

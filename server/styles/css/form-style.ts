@@ -44,13 +44,12 @@ export default {
     'input.error::placeholder': {
       color: colors.fgErrorMuted
     },
-    'input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus':
-      {
-        WebkitBackgroundClip: 'text',
-        WebkitBoxShadow: `0 0 0 1000px ${colors.bgMain} inset`,
-        WebkitTextFillColor: colors.fgMain,
-        caretColor: colors.fgMain
-      },
+    'input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus': {
+      WebkitBackgroundClip: 'text',
+      WebkitBoxShadow: `0 0 0 1000px ${colors.bgMain} inset`,
+      WebkitTextFillColor: colors.fgMain,
+      caretColor: colors.fgMain
+    },
     'input:autofill': {
       boxShadow: `0 0 0 1000px ${colors.bgMain} inset`
     },
@@ -93,7 +92,7 @@ export default {
     '.form-alt': {
       textAlign: 'center',
       fontSize: vars.fontSizeSmall,
-      color: colors.fgMuted,
+      color: colors.fgMain,
       marginTop: vars.spacingMain,
       marginBottom: '0'
     }

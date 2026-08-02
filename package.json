@@ -8,6 +8,7 @@
     "ngrok": "concurrently \"bun run start\" \"ngrok http 3000 --url ngrok.holmok.com\""
   },
   "dependencies": {
+    "@axiomhq/pino": "^1.8.0",
     "csstype": "^3.2.3",
     "hono": "^4.12.33",
     "hono-pino": "^0.10.3",
@@ -15,6 +16,7 @@
     "normalize-email": "^1.1.1",
     "pg": "^8.22.0",
     "pino": "^10.3.1",
+    "postmark": "^5.1.0",
     "uniquey": "^2.0.0",
     "zod": "^4.4.3"
   },

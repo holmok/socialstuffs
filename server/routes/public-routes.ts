@@ -1,5 +1,7 @@
 import SignUpForm from '@components/signup-form'
 import AboutPage from '@pages/about'
+import AccountValidationFailurePage from '@pages/account-validation-failure'
+import AccountValidationSuccessPage from '@pages/account-validation-success'
 import HomePage from '@pages/home'
 import SignInPage from '@pages/sign-in'
 import SignUpPage from '@pages/sign-up'
@@ -85,7 +87,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
     const form = Object.fromEntries(formData.entries()) as SignUpData
     const { data, errors } = utils.validateFormData<SignUpData>(form, signUpSchema)
 
-    const { db, logger } = c.var
+    const { db, logger, api, config } = c.var
 
     const normalizedEmail = normalizeEmail(data.email)
     const normalizedUsername = data.username.toLowerCase()
@@ -113,24 +115,127 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
       logger.warn({ errors }, 'Validation errors on sign-up form')
       return c.html(SignUpForm({ ...data, errors }))
     } else {
-      // ...otherwise create user
-      const passwordHash = await Bun.password.hash(data.password, {
-        algorithm: 'bcrypt',
-        cost: 10
-      })
-      await db
-        .insertInto('users')
-        .values({
-          uid: uniquey.create(),
-          username: data.username,
-          normalizedUsername,
-          email: data.email,
-          normalizedEmail,
-          passwordHash
+      try {
+        // ...otherwise create user
+        const passwordHash = await Bun.password.hash(data.password, {
+          algorithm: 'bcrypt',
+          cost: 10
         })
+        const [user] = await db
+          .insertInto('users')
+          .values({
+            uid: uniquey.create(),
+            username: data.username,
+            normalizedUsername,
+            email: data.email,
+            normalizedEmail,
+            passwordHash
+          })
+          .returningAll()
+          .execute()
+
+        const token = uniquey.create()
+        await db
+          .insertInto('accountValidationTokens')
+          .values({
+            token,
+            userId: user.id
+          })
+          .execute()
+
+        await api.email.sendEmail({
+          to: form.email,
+          subject: 'Welcome to Social Stuffs! Please validate your account.',
+          template: 'account-validation-email',
+          data: {
+            username: user.username,
+            url: `${new URL(`/validate-account/${token}/${user.uid}`, config.baseLinkUrl).href}`
+          }
+        })
+
+        return c.redirect('/sign-in', 303)
+      } catch (error) {
+        utils.logError(logger, error, 'Error creating user')
+        return c.html(SignUpForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }), 500)
+      }
+    }
+  })
+
+  app.get('/validate-account/:token/:uid', async (c) => {
+    const { token, uid } = c.req.param()
+    const { db, logger } = c.var
+
+    try {
+      const user = await db
+        .selectFrom('users')
+        .innerJoin('accountValidationTokens', 'users.id', 'accountValidationTokens.userId')
+        .where('accountValidationTokens.token', '=', token)
+        .where('users.uid', '=', uid)
+        .selectAll()
+        .executeTakeFirst()
+
+      const isTokenClaimed = await db
+        .selectFrom('accountValidationTokens')
+        .where('token', '=', token)
+        .select(['claimed', 'userId', 'token'])
+        .executeTakeFirst()
+
+      let invalidToken = false
+
+      if (!user) {
+        logger.warn({ token, uid }, 'Account validation invalid user uid')
+        invalidToken = true
+      }
+
+      if (!isTokenClaimed) {
+        logger.warn({ token, uid }, 'Account validation invalid token')
+        invalidToken = true
+      } else if (isTokenClaimed.claimed) {
+        logger.warn({ token, uid }, 'Account validation token has already been claimed')
+        invalidToken = true
+      } else if (user && isTokenClaimed.userId !== user?.id) {
+        logger.warn({ token, uid }, 'Account validation token does not match user')
+        invalidToken = true
+      }
+
+      if (invalidToken) {
+        return c.html(
+          AccountValidationFailurePage({
+            description: 'Invalid account validation link.',
+            message: 'The account validation link is invalid or has expired.'
+          }),
+          400
+        )
+      }
+
+      await db
+        .updateTable('users')
+        .set({ status: 'active' })
+        .where('id', '=', user?.id as number)
         .execute()
 
-      return c.redirect('/sign-in', 303)
+      await db
+        .updateTable('accountValidationTokens')
+        .set({ claimed: new Date() })
+        .where('userId', '=', user?.id as number)
+        .execute()
+
+      logger.info({ userId: user?.id, uid: user?.uid }, 'User account validated successfully')
+
+      return c.html(
+        AccountValidationSuccessPage({
+          description: 'Your account has been validated successfully.'
+        })
+      )
+    } catch (error) {
+      utils.logError(logger, error, 'Error validating account')
+      return c.html(
+        AccountValidationFailurePage({
+          description: 'An unexpected error occurred.',
+          message: 'Something went wrong. Please try again later.'
+        }),
+        500
+      )
     }
   })
 }

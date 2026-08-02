@@ -5,6 +5,12 @@ import type { Server } from 'bun'
 import type { Logger } from 'pino'
 import type { z } from 'zod'
 
+export function logError(logger: Logger, error: unknown, message: string) {
+  const errorMessage = error instanceof Error ? error.message : String(error)
+  const errorStack = error instanceof Error ? error.stack : undefined
+  logger.error({ error: errorMessage, stack: errorStack }, message)
+}
+
 let shuttingDown = false
 export function shutdown(type: 'SIGINT' | 'SIGTERM', server: Server<undefined>, db: ReturnType<typeof data>, logger: Logger) {
   if (shuttingDown) {

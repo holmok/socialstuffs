@@ -34,11 +34,7 @@ export default {
     marginBottom: vars.spacingMain
   },
   a: {
-    color: colors.accentBlue,
-    textDecoration: 'none'
-  },
-  'a:hover': {
-    textDecoration: 'underline'
+    color: colors.fgAccent
   },
   ':focus-visible': {
     outline: `${vars.outlineWidthMain} solid ${colors.accentOrange}`,
@@ -96,7 +92,8 @@ export default {
   '.site-title': {
     color: colors.fgMain,
     fontWeight: 'bold',
-    fontSize: vars.fontSizeLarge
+    fontSize: vars.fontSizeLarge,
+    textDecoration: 'none'
   },
   '.site-title:hover': {
     textDecoration: 'none'
@@ -116,11 +113,11 @@ export default {
     padding: '0'
   },
   'nav a': {
-    color: colors.fgMain
+    color: colors.fgMain,
+    textDecoration: 'none'
   },
   'nav a:hover': {
-    color: colors.accentBlue,
-    textDecoration: 'none'
+    color: colors.accentBlue
   },
   '.nav-toggle': {
     display: 'none',
@@ -156,7 +153,8 @@ export default {
     'nav a': {
       display: 'block',
       padding: `${vars.spacingSmall} ${vars.spacingMain}`,
-      textAlign: 'center'
+      textAlign: 'center',
+      textDecoration: 'none'
     },
     'nav a:hover': {
       backgroundColor: colors.bgSurface

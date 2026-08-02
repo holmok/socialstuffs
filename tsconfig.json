@@ -8,6 +8,7 @@
       "@templates/*": ["./templates/*"],
       "@components/*": ["./templates/components/*"],
       "@pages/*": ["./templates/pages/*"],
+      "@api/*": ["./server/api/*"],
       "@styles/*": ["./server/styles/*"]
     },
     "strict": true,

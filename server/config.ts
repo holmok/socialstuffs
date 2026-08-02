@@ -22,7 +22,13 @@ const envSchema = z.object({
   DATABASE_MIN_CLIENTS: z
     .string()
     .default('1')
-    .transform((val) => Number(val))
+    .transform((val) => Number(val)),
+  AXIOM_DATASET: z.string(),
+  AXIOM_TOKEN: z.string(),
+  POSTMARK_TOKEN: z.string(),
+  FROM_EMAIL: z.string(),
+  BASE_LINK_URL: z.string().default('http://localhost:3000'),
+  BASE_IMAGE_URL: z.string().default('https://storage.googleapis.com/social-stuffs-images')
 })
 
 export type Config = ReturnType<typeof LoadConfig>
@@ -63,7 +69,17 @@ export default function LoadConfig() {
   }
 
   return {
+    baseLinkUrl: env.BASE_LINK_URL,
+    baseImageUrl: env.BASE_IMAGE_URL,
+    email: {
+      postmarkToken: env.POSTMARK_TOKEN,
+      fromEmail: env.FROM_EMAIL
+    },
     poolConfig,
+    axiom: {
+      dataset: env.AXIOM_DATASET,
+      token: env.AXIOM_TOKEN
+    },
     dbSchema: env.DATABASE_SCHEMA,
     server: {
       port: env.PORT,
@@ -74,7 +90,6 @@ export default function LoadConfig() {
       isProd: env.NODE_ENV === 'production',
       env: env.NODE_ENV
     },
-    pino:
-      env.NODE_ENV === 'development' ? devPinoOptions : productionPinoOptions
+    pino: env.NODE_ENV === 'development' ? devPinoOptions : productionPinoOptions
   }
 }

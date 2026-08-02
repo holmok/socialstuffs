@@ -4,7 +4,21 @@ import { createApp } from './server'
 import * as utils from './utils'
 
 const config = LoadConfig()
-const logger = pino(config.pino)
+
+let streams: pino.StreamEntry[] = [{ stream: process.stdout }]
+if (config.mode.isProd) {
+  const axiomStream = pino.transport({
+    target: '@axiomhq/pino',
+    options: {
+      dataset: config.axiom.dataset,
+      token: config.axiom.token,
+      edge: 'us-east-1.aws.edge.axiom.co'
+    }
+  })
+  streams = [{ stream: process.stdout }, { stream: axiomStream }]
+}
+
+const logger = pino(config.pino, pino.multistream(streams))
 
 await utils.assertPortFree(config.server.host, config.server.port, logger)
 
