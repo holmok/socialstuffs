@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(bun remove *)",
+      "Bash(curl -s -o /dev/null -w \"GET /js/htmx.min.js -> %{http_code} \\(%{content_type}\\)\\\\n\" http://localhost:3000/js/htmx.min.js)",
+      "Bash(curl -s -o /dev/null -w \"GET /favicon.ico -> %{http_code}\\\\n\" http://localhost:3000/favicon.ico)"
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
   }

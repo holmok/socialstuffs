@@ -1,6 +1,6 @@
 import type * as CSS from 'csstype'
 
-import authStyles from './css/auth-style'
+import authStyles from './css/form-style'
 import globalStyles from './css/global-style'
 import resetStyles from './css/reset-style'
 
@@ -50,7 +50,8 @@ function renderCSS(styles: CSSObject): string {
     if (typeof value === 'object') {
       cssString += `${property} { ${renderCSS(value as CSSObject)} } `
     } else {
-      const cssValue = typeof value === 'number' && value !== 0 ? `${value}px` : value
+      const cssValue =
+        typeof value === 'number' && value !== 0 ? `${value}px` : value
       cssString += `${toKebabCase(property)}: ${cssValue}; `
     }
   }

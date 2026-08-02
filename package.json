@@ -8,10 +8,12 @@
     "ngrok": "concurrently \"bun run start\" \"ngrok http 3000 --url ngrok.holmok.com\""
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.12",
     "csstype": "^3.2.3",
     "hono": "^4.12.33",
     "hono-pino": "^0.10.3",
+    "kysely": "^0.29.4",
+    "normalize-email": "^1.1.1",
+    "pg": "^8.22.0",
     "pino": "^10.3.1",
     "uniquey": "^2.0.0",
     "zod": "^4.4.3"

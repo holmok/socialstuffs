@@ -1,3 +1,4 @@
+import type { PoolConfig } from 'pg'
 import type pino from 'pino'
 import { z } from 'zod'
 
@@ -11,13 +12,29 @@ const envSchema = z.object({
   HOST: z.string().default('localhost'),
   NODE_ENV: z.enum(['development', 'production']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  LOG_NAME: z.string().default(APP_NAME)
+  LOG_NAME: z.string().default(APP_NAME),
+  DATABASE_URL: z.string(),
+  DATABASE_SCHEMA: z.string(),
+  DATABASE_MAX_CLIENTS: z
+    .string()
+    .default('10')
+    .transform((val) => Number(val)),
+  DATABASE_MIN_CLIENTS: z
+    .string()
+    .default('1')
+    .transform((val) => Number(val))
 })
 
 export type Config = ReturnType<typeof LoadConfig>
 
 export default function LoadConfig() {
   const env = envSchema.parse(process.env)
+
+  const poolConfig: PoolConfig = {
+    connectionString: env.DATABASE_URL,
+    max: env.DATABASE_MAX_CLIENTS,
+    min: env.DATABASE_MIN_CLIENTS
+  }
 
   const devPinoOptions: pino.LoggerOptions = {
     name: env.LOG_NAME,
@@ -46,6 +63,8 @@ export default function LoadConfig() {
   }
 
   return {
+    poolConfig,
+    dbSchema: env.DATABASE_SCHEMA,
     server: {
       port: env.PORT,
       host: env.HOST
@@ -55,6 +74,7 @@ export default function LoadConfig() {
       isProd: env.NODE_ENV === 'production',
       env: env.NODE_ENV
     },
-    pino: env.NODE_ENV === 'development' ? devPinoOptions : productionPinoOptions
+    pino:
+      env.NODE_ENV === 'development' ? devPinoOptions : productionPinoOptions
   }
 }

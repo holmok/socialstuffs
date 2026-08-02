@@ -95,10 +95,10 @@ export default {
   },
   '.site-title': {
     color: colors.fgMain,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    fontSize: vars.fontSizeLarge
   },
   '.site-title:hover': {
-    color: colors.accentBlue,
     textDecoration: 'none'
   },
   '.site-title span': {

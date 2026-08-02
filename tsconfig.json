@@ -3,7 +3,7 @@
     "paths": {
       "@/*": ["./server/*"],
       "@routes/*": ["./server/routes/*"],
-      "@api/*": ["./server/api/*"],
+      "@data/*": ["./server/data/*"],
       "@middleware/*": ["./server/middleware/*"],
       "@templates/*": ["./templates/*"],
       "@components/*": ["./templates/components/*"],

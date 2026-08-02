@@ -1,36 +1,37 @@
 import { lookup } from 'node:dns/promises'
 import net from 'node:net'
-import type { ServerType } from '@hono/node-server'
+import type data from '@data/index'
+import type { Server } from 'bun'
 import type { Logger } from 'pino'
-import type API from './api'
+import type { z } from 'zod'
 
 let shuttingDown = false
-export function shutdown(type: 'SIGINT' | 'SIGTERM', server: ServerType, api: API, logger: Logger) {
+export function shutdown(type: 'SIGINT' | 'SIGTERM', server: Server<undefined>, db: ReturnType<typeof data>, logger: Logger) {
   if (shuttingDown) {
     logger.warn({ type }, 'Shutdown already in progress, ignoring additional signal')
     return
   }
   shuttingDown = true
   logger.warn({ type }, 'Shutting down server')
-  server.close((err) => {
-    let status = 0
-
-    api.shutdown().catch((err) => {
-      logger.error({ type, error: err }, 'Error shutting down API')
-      status = 1
+  server
+    .stop()
+    .then(() => {
+      logger.info({ type }, 'Closing database connection')
+      return db.destroy()
     })
-
-    if (err) {
+    .then(() => {
+      logger.info({ type }, 'Database connection closed')
+      logger.info({ type, status: 0 }, 'Server shutdown complete')
+      process.exit(0)
+    })
+    .catch((err: unknown) => {
       if (err instanceof Error) {
-        logger.error({ type, error: err, stack: err.stack, message: err.message }, 'Error closing server')
+        logger.error({ type, error: err, stack: err.stack, message: err.message }, 'Error during shutdown')
       } else {
-        logger.error({ type, error: String(err) }, 'Error closing server')
+        logger.error({ type, error: String(err) }, 'Error during shutdown')
       }
-      status = 1
-    }
-    logger.info({ type, status }, 'Server shutdown complete')
-    process.exit(status)
-  })
+      process.exit(1)
+    })
 }
 
 export async function assertPortFree(host: string, port: number, logger: Logger) {
@@ -54,4 +55,22 @@ export async function assertPortFree(host: string, port: number, logger: Logger)
       process.exit(1)
     }
   }
+}
+
+export function validateFormData<T>(
+  data: Record<string, unknown>,
+  schema: z.ZodType<T>
+): { data: T; errors: Partial<Record<keyof T, string[]>> } {
+  const result = schema.safeParse(data)
+  if (!result.success) {
+    const errors: Partial<Record<keyof T, string[]>> = {}
+    result.error.issues.forEach((err) => {
+      const key = err.path[0] as keyof T
+      const messages = errors[key] ?? []
+      messages.push(err.message)
+      errors[key] = messages
+    })
+    return { data: data as T, errors }
+  }
+  return { data: result.data, errors: {} }
 }

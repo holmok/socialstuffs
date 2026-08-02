@@ -5,7 +5,7 @@ const Header = () => {
     <header>
       <div class="header-inner">
         <a class="site-title" href="/">
-          Bun <span>+</span> Hono <span>+</span> HTMX
+          social<span>stuffs</span>
         </a>
         <Navigation />
       </div>

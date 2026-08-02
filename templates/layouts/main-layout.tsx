@@ -23,12 +23,26 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="description" content={description} />
           <title>Bun + Hono + HTMX / {title}</title>
-          <style>{styleString}</style>
+          <style dangerouslySetInnerHTML={{ __html: styleString }}></style>
           <script src="/js/htmx.min.js" defer></script>
           <script src="/js/nav.js" defer></script>
-          <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-          <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-          <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+          <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="/apple-touch-icon.png"
+          />
+          <link
+            rel="icon"
+            type="image/png"
+            sizes="32x32"
+            href="/favicon-32x32.png"
+          />
+          <link
+            rel="icon"
+            type="image/png"
+            sizes="16x16"
+            href="/favicon-16x16.png"
+          />
           <link rel="manifest" href="/site.webmanifest" />
         </head>
         <body id="top">
