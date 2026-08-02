@@ -8,7 +8,7 @@ interface HomePageProps {
 
 const HomePage = ({ description, user }: HomePageProps) => {
   return (
-    <Layout title="Home" description={description}>
+    <Layout title="Home" description={description} styles={['info']}>
       <div class="home-anon">
         <section class="hero">
           <p class="eyebrow">A Better Social Site</p>
@@ -20,10 +20,10 @@ const HomePage = ({ description, user }: HomePageProps) => {
             what you see, and no advertisers looking over your shoulder.
           </p>
           <div class="hero-actions">
-            <a class="cta" href="/register">
+            <a class="cta" href="/sign-up">
               Create your account
             </a>
-            <a class="cta quiet" href="/login">
+            <a class="cta quiet" href="/sign-in">
               Sign in
             </a>
           </div>
@@ -92,7 +92,7 @@ const HomePage = ({ description, user }: HomePageProps) => {
           <p>
             Want the longer story? It's on the <a href="/about">about page</a>.
           </p>
-          <a class="cta" href="/register">
+          <a class="cta" href="/sign-up">
             Join socialstuffs
           </a>
         </section>

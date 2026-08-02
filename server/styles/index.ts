@@ -2,14 +2,16 @@ import type * as CSS from 'csstype'
 
 import authStyles from './css/form-style'
 import globalStyles from './css/global-style'
+import infoStyles from './css/info-style'
 import resetStyles from './css/reset-style'
 
-export type style = 'global' | 'reset' | 'auth'
+export type style = 'global' | 'reset' | 'auth' | 'info'
 
 const stylesMap: Record<style, string> = {
   global: renderCSS(globalStyles),
   reset: renderCSS(resetStyles),
-  auth: renderCSS(authStyles)
+  auth: renderCSS(authStyles),
+  info: renderCSS(infoStyles)
 }
 
 const cachedStyleCombos: Record<string, string> = {}

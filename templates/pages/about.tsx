@@ -6,8 +6,7 @@ interface AboutPageProps {
 
 const AboutPage = ({ description }: AboutPageProps) => {
   return (
-    <Layout title="About" description={description}>
-      <h1>About</h1>
+    <Layout title="About" description={description} styles={['info']}>
       <div class="about">
         <section class="about-hero">
           <p class="eyebrow">Why socialstuffs exists</p>
