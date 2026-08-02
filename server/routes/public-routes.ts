@@ -6,6 +6,9 @@ import SignInPage from '@pages/sign-in'
 import SignUpPage from '@pages/sign-up'
 import SignInForm from '@templates/components/sign-in-form'
 import SignUpForm from '@templates/components/sign-up-form'
+import ContactPage from '@templates/pages/contact'
+import PrivacyPage from '@templates/pages/privacy'
+import TermsPage from '@templates/pages/terms'
 import type { Hono } from 'hono'
 import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
@@ -63,18 +66,23 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   logger.info('Registering public routes')
 
   app.get('/', (c) => {
-    const { auth, logger } = c.var
-    logger.debug({ user: auth.user }, 'Rendering home page with user context')
-    return c.html(
-      HomePage({
-        description: 'A server-rendered starter app built with Bun, Hono, and HTMX.',
-        user: auth.user
-      })
-    )
+    return c.html(HomePage({ description: 'A great place to hang out and share your thoughts.' }))
   })
 
   app.get('/about', (c) => {
-    return c.html(AboutPage({ description: 'About the Bun + Hono + HTMX starter app.' }))
+    return c.html(AboutPage({ description: 'All about socialstuffs.' }))
+  })
+
+  app.get('/contact', (c) => {
+    return c.html(ContactPage({ description: 'How to contact the team.' }))
+  })
+
+  app.get('/terms', (c) => {
+    return c.html(TermsPage({ description: 'Our terms of service.' }))
+  })
+
+  app.get('/privacy', (c) => {
+    return c.html(PrivacyPage({ description: 'Our privacy policy.' }))
   })
 
   app.get('/sign-in', (c) => {
