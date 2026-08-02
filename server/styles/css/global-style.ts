@@ -52,6 +52,12 @@ export default {
   'button:hover': {
     backgroundColor: colors.borderColor
   },
+  '.error-fragment': {
+    backgroundColor: colors.bgError,
+    color: colors.fgError,
+    padding: vars.spacingSmall,
+    borderRadius: vars.borderRadiusMain
+  },
   '.card': {
     backgroundColor: colors.bgSurface,
     borderRadius: vars.borderRadiusMain,

@@ -36,5 +36,7 @@ export function createApp(config: Config, logger: Logger) {
   Routes(app, logger)
   app.use('/*', m.staticCache(config))
   app.use('/*', serveStatic({ root: './static' }))
+  app.notFound(m.notFoundHandler())
+  app.onError(m.errorHandler())
   return { app, db }
 }

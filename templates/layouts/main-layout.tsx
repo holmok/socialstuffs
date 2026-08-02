@@ -22,6 +22,7 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
           <meta charSet="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="description" content={description} />
+          <meta name="htmx-config" content={'{"responseHandling":[{"code":"204","swap":false},{"code":"...","swap":true}]}'} />
           <title>Bun + Hono + HTMX / {title}</title>
           <style dangerouslySetInnerHTML={{ __html: styleString }}></style>
           <script src="/js/htmx.min.js" defer></script>
