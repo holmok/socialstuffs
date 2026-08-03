@@ -88,7 +88,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   app.get('/sign-in', (c) => {
     return c.html(
       SignInPage({
-        description: 'Sign in to the Bun + Hono + HTMX starter app.'
+        description: 'Sign in to socialstuffs.'
       })
     )
   })
@@ -141,7 +141,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   app.get('/sign-up', (c) => {
     return c.html(
       SignUpPage({
-        description: 'Create an account for the Bun + Hono + HTMX starter app.'
+        description: 'Create an account for socialstuffs.'
       })
     )
   })

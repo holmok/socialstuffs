@@ -10,36 +10,63 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `bun run typecheck` — TypeScript type check (`tsc --noEmit`)
 - `bunx biome check .` — lint and format check (Biome is the linter/formatter; also `bun run check`)
 - `bunx biome check --write .` — apply lint/format fixes
+- `bun run ngrok` — run production mode plus an ngrok tunnel at ngrok.holmok.com (via `concurrently`)
 
 There is no test suite or build step; the server runs TypeScript directly via Bun.
 
+## What this is
+
+socialstuffs — a server-rendered social app (posts, comments, favorites, follows) built on Bun + Hono + HTMX, backed by Postgres. HTML is built with Hono's JSX runtime (`jsxImportSource: "hono/jsx"`, no React); HTMX on the client swaps HTML fragments returned by routes. Routes return full pages or fragments via `c.html(...)`.
+
 ## Architecture
 
-Server-rendered app: Hono serves HTML built with Hono's JSX runtime (`jsxImportSource: "hono/jsx"`, no React), and HTMX on the client swaps HTML fragments returned by routes. Routes return full pages or fragments via `c.html(...)`.
+Startup flow: `server/index.ts` loads config, creates the pino logger (stdout always; in production a second stream ships logs to Axiom via `@axiomhq/pino`), verifies the port is free (`assertPortFree` in `server/utils.ts`, exits if in use), calls `createApp()` from `server/server.ts`, starts the server, and registers SIGINT/SIGTERM handlers for graceful shutdown (`shutdown` in `server/utils.ts`, which stops the server then destroys the Kysely db instance).
 
-Startup flow: `server/index.ts` loads config, creates the pino logger, verifies the port is free (`assertPortFree` in `server/utils.ts`, exits if in use), calls `createApp()` from `server/server.ts`, starts the server, and registers SIGINT/SIGTERM handlers for graceful shutdown (`shutdown` in `server/utils.ts`, which closes the server and calls `api.shutdown()`). `createApp()` wires everything together:
+`createApp()` wires everything together:
 
-1. Instantiates the `API` class (`server/api/index.ts`) — the container for backend service clients. It currently holds only `NoopAPI`; new backend services get added as private members with getters that throw once `shutdown()` has been called.
-2. Registers context middleware (`server/middleware/`) that puts `config`, `logger`, and `api` on Hono's context — available in any handler as `c.get('api')` etc. The `ContextVariableMap` declaration in `server/server.ts` types these.
-3. Registers routes via `Routes()` (`server/routes/index.ts`), which delegates to route-group files like `public-routes.ts`. New route groups get their own file and are registered in `routes/index.ts`.
-4. Falls back to serving static assets from `static/` (favicons, the vendored `htmx.min.js`), with `staticCache` middleware setting `Cache-Control` (`public, max-age=3600` in production, `no-store` in development).
+1. Creates the Kysely database instance via `data()` (`server/data/index.ts`) and the `API` class (`server/api/index.ts`).
+2. Registers context middleware (`server/middleware/`) that puts `config`, `logger`, `db`, `api`, and `auth` on Hono's context — available in any handler via `c.var` / `c.get(...)`. The `ContextVariableMap` declaration in `server/server.ts` types these.
+3. Registers `authenticate()` middleware and `compress()`.
+4. Registers routes via `Routes()` (`server/routes/index.ts`), which delegates to route-group files like `public-routes.ts`. New route groups get their own file and are registered in `routes/index.ts`.
+5. Falls back to serving static assets from `static/` (favicons, vendored `htmx.min.js`, `nav.js`), with `staticCache` middleware setting `Cache-Control` (`public, max-age=3600` in production, `no-store` in development).
+6. Registers `notFoundHandler` and `errorHandler` (`server/middleware/error-middleware.ts`): both render the error page, or the `ErrorFragment` component when the request came from HTMX (`HX-Request` header); 401s redirect to `/sign-in` (via `HX-Redirect` for HTMX requests); 5xx responses include the stack trace only in development.
 
-Templates live in `templates/` split into `layouts/` (full HTML documents), `pages/` (full pages wrapped in a layout), and `components/` (fragments suitable as HTMX swap responses).
+### Data layer (`server/data/`)
 
-Configuration (`server/config.ts`) validates env vars with Zod (`PORT`, `HOST`, `NODE_ENV`, `LOG_LEVEL`, `LOG_NAME`; a `.env` file is loaded automatically by Bun) and returns `{ server, mode, pino }` — `mode` exposes `isDev`/`isProd`/`env` derived from `NODE_ENV`. Pino options: pretty-printed logging in development (level forced to `debug`, ignoring `LOG_LEVEL`), structured JSON at `LOG_LEVEL` in production.
+Postgres accessed through Kysely (`pg` pool, `CamelCasePlugin`, `WithSchemaPlugin` using `DATABASE_SCHEMA`). Each `*-data.ts` file defines a table's Kysely types (`XTable` plus `Selectable`/`Insertable`/`Updateable` aliases); `data/index.ts` re-exports them and assembles the `Database` type (users, posts, comments, favorites, relations, postTargets, accountValidationTokens, passwordRecoveryTokens, kvStorage, cachedQueries). Handlers query directly via `c.var.db` — there is no repository layer. Database schema/migrations are managed outside this repo.
+
+### API layer (`server/api/`)
+
+The `API` class is the container for external service clients, exposed as `c.var.api`. It currently holds `EmailAPI` (`api.email`), which sends transactional email through Postmark using HTML templates in `templates/email/` with simple `{{placeholder}}` substitution (templates: `account-validation-email`, `password-recovery-email`).
+
+### Auth
+
+`authenticate()` (`server/middleware/auth-middleware.ts`) runs on every request: it reads a signed cookie, verifies the JWT inside it, and sets `c.var.auth` with `user` (the JWT claims: `uid`, `username`, `status`, `role`), `getUser()` (loads the full user row from the db), and `setUser()` (signs a JWT and sets the signed cookie). `authorize({ requireAuth, roles })` is a per-route middleware that throws 401/403 `HTTPException`s. Passwords are hashed with `Bun.password` (bcrypt). Sign-up validates form data with Zod (`validateFormData` in `server/utils.ts`), normalizes email (`normalize-email`) and username for uniqueness checks, and emails an account-validation link (token created with `uniquey`); `/validate-account/:token/:uid` claims the token and activates the user.
+
+### Redirects with HTMX
+
+Use `utils.redirect(c, path)` — it sends an `HX-Redirect` header (204) for HTMX requests and a normal 303 otherwise.
+
+### Templates
+
+Templates live in `templates/` split into `layouts/` (full HTML documents), `pages/` (full pages wrapped in a layout), `components/` (fragments suitable as HTMX swap responses, e.g. the sign-in/sign-up forms re-rendered with validation errors), and `email/` (raw HTML email templates).
+
+## Configuration (`server/config.ts`)
+
+Env vars validated with Zod (a `.env` file is loaded automatically by Bun). Required (no default): `DATABASE_URL`, `DATABASE_SCHEMA`, `AXIOM_DATASET`, `AXIOM_TOKEN`, `POSTMARK_TOKEN`, `FROM_EMAIL`, `JWT_SECRET`, `COOKIE_SECRET`, `COOKIE_NAME_USER`, `COOKIE_NAME_SESSION`. Optional with defaults: `PORT`, `HOST`, `NODE_ENV`, `LOG_LEVEL`, `LOG_NAME`, `DATABASE_MAX_CLIENTS`, `DATABASE_MIN_CLIENTS`, `BASE_LINK_URL` (used to build links in emails), `BASE_IMAGE_URL`. `LoadConfig()` returns grouped config: `auth`, `email`, `poolConfig`, `axiom`, `dbSchema`, `server`, `mode` (`isDev`/`isProd`/`env`), and `pino` (pretty-printed at `debug` level in development, structured JSON at `LOG_LEVEL` in production).
 
 ## Styles (CSS-in-TS)
 
 CSS is authored as TypeScript objects in `server/styles/` and injected inline as a `<style>` tag by the main layout — no stylesheets are served from `static/`. How it works:
 
-- Style modules live in `server/styles/css/` (`reset-style.ts`, `global-style.ts`), typed as `CSSObject` (csstype-based): keys are selectors or camelCased CSS properties, values nest for at-rules/nested selectors. Bare numbers render as `px`.
+- Style modules live in `server/styles/css/` (`reset-style.ts`, `global-style.ts`, `form-style.ts`, `info-style.ts`, `error-style.ts`), typed as `CSSObject` (csstype-based): keys are selectors or camelCased CSS properties, values nest for at-rules/nested selectors. Bare numbers render as `px`.
 - Design tokens live in `server/styles/_colors.ts` and `server/styles/_vars.ts`; style modules import from these rather than hardcoding values.
-- `getStyle()` in `server/styles/index.ts` renders and concatenates the requested styles, caching each combination. To add a style, create a module in `css/`, then register it in the `style` union type and `stylesMap` in `styles/index.ts`.
+- `getStyle()` in `server/styles/index.ts` renders and concatenates the requested styles, caching each combination. To add a style, create a module in `css/`, then register it in the `style` union type and `stylesMap` in `styles/index.ts` (current names: `global`, `reset`, `auth`, `info`, `error`).
 - The `Layout` component (`templates/layouts/main-layout.tsx`) always includes `reset` and `global`, and pages can pass additional style names via its `styles` prop.
 
 ## Path aliases
 
-Defined in `tsconfig.json`: `@/*` → `server/`, plus `@routes/*`, `@api/*`, `@middleware/*`, `@styles/*`, `@templates/*`, `@components/*`, `@pages/*`. Use these instead of relative imports.
+Defined in `tsconfig.json`: `@/*` → `server/`, plus `@routes/*`, `@api/*`, `@data/*`, `@middleware/*`, `@styles/*`, `@templates/*`, `@components/*`, `@pages/*`. Use these instead of relative imports.
 
 ## Style
 

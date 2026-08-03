@@ -1,5 +1,5 @@
 {
-  "name": "bun-hono-htmx",
+  "name": "socialstuffs",
   "scripts": {
     "dev": "NODE_ENV=development bun run --watch server/index.ts",
     "start": "NODE_ENV=production bun run server/index.ts",
