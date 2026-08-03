@@ -1,6 +1,7 @@
 import API from '@api/index'
 import data from '@data/index'
 import type { AuthContext } from '@middleware/auth-middleware'
+import type { FlashContext } from '@middleware/flash-middleware'
 import * as m from '@middleware/index'
 import type { SessionContext } from '@middleware/session-middleware'
 import Routes from '@routes/index'
@@ -18,6 +19,7 @@ declare module 'hono' {
     logger: Logger
     config: Config
     session: SessionContext
+    flash: FlashContext
   }
 }
 
@@ -34,6 +36,8 @@ export function createApp(config: Config, logger: Logger) {
   app.use(m.apiContext(api))
   app.use(m.authenticate())
   app.use(m.session())
+  app.use(m.flash())
+  app.use(m.layoutContext())
   app.use(compress())
 
   Routes(app, logger)

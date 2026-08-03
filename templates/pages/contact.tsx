@@ -1,12 +1,6 @@
-import Layout from '../layouts/main-layout'
-
-interface ContactPageProps {
-  description: string
-}
-
-const ContactPage = ({ description }: ContactPageProps) => {
+const ContactPage = () => {
   return (
-    <Layout title="Contact Us" description={description} styles={['info']}>
+    <>
       <h1>Contact Us</h1>
       <p>
         If you have any questions, feedback, or just want to say hello, feel free to reach out to us. We're happy to hear from you
@@ -20,7 +14,7 @@ const ContactPage = ({ description }: ContactPageProps) => {
         To report an imposter, questionable content, or anything else that doesn't belong on socialstuffs, please reach out to{' '}
         <a href="mailto:report@socialstuffs.com">report@socialstuffs.com</a>.
       </p>
-    </Layout>
+    </>
   )
 }
 

@@ -1,12 +1,6 @@
-import Layout from '../layouts/main-layout'
-
-interface TermsPageProps {
-  description: string
-}
-
-const TermsPage = ({ description }: TermsPageProps) => {
+const TermsPage = () => {
   return (
-    <Layout title="Terms of Service" description={description} styles={['info']}>
+    <>
       <h1>Terms of Service</h1>
 
       <p>
@@ -96,7 +90,7 @@ const TermsPage = ({ description }: TermsPageProps) => {
         Questions or worried about something? <a href="/contact">Reach out</a>, we'd love to hear from you. Thanks for being here
         and helping keep this a friendly place. &#128075;
       </p>
-    </Layout>
+    </>
   )
 }
 

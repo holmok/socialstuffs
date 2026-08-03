@@ -58,6 +58,46 @@ export default {
     padding: vars.spacingSmall,
     borderRadius: vars.borderRadiusMain
   },
+  '.flash': {
+    maxWidth: vars.maxWidthMain,
+    margin: '0 auto',
+    padding: `${vars.spacingMain} ${vars.spacingMain} 0`,
+    display: 'grid',
+    gap: vars.spacingSmall
+  },
+  '.flash-item': {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: vars.spacingMid,
+    backgroundColor: colors.bgSurface,
+    borderLeft: `3px solid ${colors.accentBlue}`,
+    borderRadius: vars.borderRadiusMain,
+    padding: `${vars.spacingSmall} ${vars.spacingMid}`,
+    p: {
+      margin: '0',
+      lineHeight: '1.4'
+    }
+  },
+  '.flash-success': {
+    borderLeftColor: colors.fgSuccess
+  },
+  '.flash-error': {
+    borderLeftColor: colors.fgError
+  },
+  '.flash-close': {
+    backgroundColor: 'transparent',
+    color: colors.fgMuted,
+    fontSize: vars.fontSizeMid,
+    lineHeight: '1',
+    padding: '0',
+    border: 'none',
+    flexShrink: '0'
+  },
+  '.flash-close:hover': {
+    backgroundColor: 'transparent',
+    color: colors.fgMain
+  },
   '.card': {
     backgroundColor: colors.bgSurface,
     borderRadius: vars.borderRadiusMain,

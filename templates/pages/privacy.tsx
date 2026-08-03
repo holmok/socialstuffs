@@ -1,12 +1,6 @@
-import Layout from '../layouts/main-layout'
-
-interface PrivacyPageProps {
-  description: string
-}
-
-const PrivacyPage = ({ description }: PrivacyPageProps) => {
+const PrivacyPage = () => {
   return (
-    <Layout title="Privacy Policy" description={description} styles={['info']}>
+    <>
       <h1>Privacy Policy</h1>
 
       <p>
@@ -70,7 +64,7 @@ const PrivacyPage = ({ description }: PrivacyPageProps) => {
         Got questions about your privacy? <a href="/contact">Reach out</a> anytime, we're happy to explain. Thanks for trusting us
         with your stuff. &#128154;
       </p>
-    </Layout>
+    </>
   )
 }
 

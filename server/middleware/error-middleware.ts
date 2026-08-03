@@ -12,7 +12,12 @@ function renderError(c: Context, status: ContentfulStatusCode, message?: string,
   if (isHtmxRequest(c)) {
     return c.html(ErrorFragment({ status, message }), status)
   }
-  return c.html(ErrorPage({ status, message, detail }), status)
+  c.status(status)
+  return c.render(ErrorPage({ status, message, detail }), {
+    title: `Error ${status}`,
+    description: 'Something went wrong.',
+    styles: ['info', 'error']
+  })
 }
 
 export function notFoundHandler(): NotFoundHandler {

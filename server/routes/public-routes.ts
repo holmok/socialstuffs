@@ -66,31 +66,31 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   logger.info('Registering public routes')
 
   app.get('/', (c) => {
-    return c.html(HomePage({ description: 'A great place to hang out and share your thoughts.' }))
+    return c.render(HomePage(), {
+      title: 'Home',
+      description: 'A great place to hang out and share your thoughts.',
+      styles: ['info']
+    })
   })
 
   app.get('/about', (c) => {
-    return c.html(AboutPage({ description: 'All about socialstuffs.' }))
+    return c.render(AboutPage(), { title: 'About', description: 'All about socialstuffs.', styles: ['info'] })
   })
 
   app.get('/contact', (c) => {
-    return c.html(ContactPage({ description: 'How to contact the team.' }))
+    return c.render(ContactPage(), { title: 'Contact Us', description: 'How to contact the team.', styles: ['info'] })
   })
 
   app.get('/terms', (c) => {
-    return c.html(TermsPage({ description: 'Our terms of service.' }))
+    return c.render(TermsPage(), { title: 'Terms of Service', description: 'Our terms of service.', styles: ['info'] })
   })
 
   app.get('/privacy', (c) => {
-    return c.html(PrivacyPage({ description: 'Our privacy policy.' }))
+    return c.render(PrivacyPage(), { title: 'Privacy Policy', description: 'Our privacy policy.', styles: ['info'] })
   })
 
   app.get('/sign-in', (c) => {
-    return c.html(
-      SignInPage({
-        description: 'Sign in to socialstuffs.'
-      })
-    )
+    return c.render(SignInPage(), { title: 'Sign in', description: 'Sign in to socialstuffs.', styles: ['auth'] })
   })
 
   app.post('/sign-in', async (c) => {
@@ -102,7 +102,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
       logger.warn({ errors }, 'Validation errors on sign-in form')
       return c.html(SignInForm({ ...data, errors }))
     } else {
-      const { db, logger, auth } = c.var
+      const { db, logger, auth, flash } = c.var
 
       const normalizedEmail = normalizeEmail(data.email)
 
@@ -130,6 +130,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
 
         logger.info({ userId: user.id }, 'User signed in successfully')
 
+        flash.addFlash('success', 'You have signed in successfully.')
         return utils.redirect(c, '/')
       } catch (error) {
         utils.logError(logger, error, 'Error during sign-in')
@@ -139,11 +140,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   })
 
   app.get('/sign-up', (c) => {
-    return c.html(
-      SignUpPage({
-        description: 'Create an account for socialstuffs.'
-      })
-    )
+    return c.render(SignUpPage(), { title: 'Sign Up', description: 'Create an account for socialstuffs.', styles: ['auth'] })
   })
 
   app.post('/sign-up', async (c) => {
@@ -263,13 +260,11 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
       }
 
       if (invalidToken) {
-        return c.html(
-          AccountValidationFailurePage({
-            description: 'Invalid account validation link.',
-            message: 'The account validation link is invalid or has expired.'
-          }),
-          400
-        )
+        c.status(400)
+        return c.render(AccountValidationFailurePage({ message: 'The account validation link is invalid or has expired.' }), {
+          title: 'Account Validation Failure',
+          description: 'Invalid account validation link.'
+        })
       }
 
       await db
@@ -286,20 +281,17 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
 
       logger.info({ userId: user?.id, uid: user?.uid }, 'User account validated successfully')
 
-      return c.html(
-        AccountValidationSuccessPage({
-          description: 'Your account has been validated successfully.'
-        })
-      )
+      return c.render(AccountValidationSuccessPage(), {
+        title: 'Account Validation Success',
+        description: 'Your account has been validated successfully.'
+      })
     } catch (error) {
       utils.logError(logger, error, 'Error validating account')
-      return c.html(
-        AccountValidationFailurePage({
-          description: 'An unexpected error occurred.',
-          message: 'Something went wrong. Please try again later.'
-        }),
-        500
-      )
+      c.status(500)
+      return c.render(AccountValidationFailurePage({ message: 'Something went wrong. Please try again later.' }), {
+        title: 'Account Validation Failure',
+        description: 'An unexpected error occurred.'
+      })
     }
   })
 }
