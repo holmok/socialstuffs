@@ -58,7 +58,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         logger.info({ userId: user.id }, 'User signed in successfully')
 
         flash.addFlash('success', 'You have signed in successfully.')
-        return utils.redirect(c, '/')
+        return utils.redirect(c, '/user')
       } catch (error) {
         utils.logError(logger, error, 'Error during sign-in')
         return c.html(SignInForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }))

@@ -15,8 +15,17 @@ export function layoutContext(): MiddlewareHandler {
     async ({ children, title, description, styles }) => {
       const c = useRequestContext()
       const flashes = await c.var.flash.getFlashes()
+      const user = c.var.auth.user
+      const isAuthenticated = !!user
       return (
-        <Layout title={title} description={description} styles={styles} flashes={flashes}>
+        <Layout
+          title={title}
+          description={description}
+          styles={styles}
+          flashes={flashes}
+          isAuthenticated={isAuthenticated}
+          user={user}
+        >
           {children}
         </Layout>
       )

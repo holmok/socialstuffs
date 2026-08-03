@@ -7,11 +7,11 @@ const Footer = () => {
           <a href="/about">About</a> {' · '}
           <a href="/contact">Contact</a> {' · '}
           <a href="/terms">Terms</a> {' · '}
-          <a href="/privacy">Privacy</a>
+          <a href="/privacy">Privacy</a> {' · '}
+          <a class="back-to-top" href="#top">
+            Up ↑
+          </a>
         </span>
-        <a class="back-to-top" href="#top">
-          Up ↑
-        </a>
       </div>
     </footer>
   )

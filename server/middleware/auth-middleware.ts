@@ -10,6 +10,7 @@ export type AuthContext = {
   user: UserContext | undefined
   getUser: () => Promise<User | undefined>
   setUser: (userContext: UserContext) => Promise<void>
+  signOut: () => Promise<void>
 }
 
 function mapUserToUser(user: UserData): User {
@@ -46,6 +47,13 @@ export function authenticate(): MiddlewareHandler {
         if (!userContext) return undefined
         const user = await db.selectFrom('users').where('uid', '=', userContext.uid).selectAll().executeTakeFirst()
         return user ? mapUserToUser(user) : undefined
+      },
+      async signOut() {
+        await cookie.setSignedCookie(c, config.auth.userCookieName, '', config.auth.cookieSecret, {
+          httpOnly: true,
+          sameSite: 'strict',
+          maxAge: 0
+        })
       }
     }
     c.set('auth', auth)

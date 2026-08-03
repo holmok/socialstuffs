@@ -70,8 +70,8 @@ export default {
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: vars.spacingMid,
-    backgroundColor: colors.bgSurface,
-    borderLeft: `3px solid ${colors.accentBlue}`,
+    backgroundColor: colors.bgInfo,
+    color: colors.accentBlue,
     borderRadius: vars.borderRadiusMain,
     padding: `${vars.spacingSmall} ${vars.spacingMid}`,
     p: {
@@ -80,19 +80,24 @@ export default {
     }
   },
   '.flash-success': {
-    borderLeftColor: colors.fgSuccess
+    backgroundColor: colors.bgSuccess,
+    color: colors.fgSuccess
   },
   '.flash-error': {
-    borderLeftColor: colors.fgError
+    backgroundColor: colors.bgError,
+    color: colors.fgError
   },
   '.flash-close': {
     backgroundColor: 'transparent',
-    color: colors.fgMuted,
+    color: 'inherit',
     fontSize: vars.fontSizeMid,
     lineHeight: '1',
     padding: '0',
     border: 'none',
-    flexShrink: '0'
+    flexShrink: '0',
+    cursor: 'pointer',
+    position: 'relative',
+    top: '-2px'
   },
   '.flash-close:hover': {
     backgroundColor: 'transparent',
