@@ -4,7 +4,7 @@ export type KvStoreTable = {
   id: Generated<number>
   key: ColumnType<string, string, never>
   value: ColumnType<string, string, string>
-  created: ColumnType<Date, Date, never>
+  created: ColumnType<Date, never, never>
   expires: ColumnType<Date, Date, Date>
 }
 
