@@ -28,11 +28,11 @@ export function notFoundHandler(): NotFoundHandler {
 }
 
 export function errorHandler(): ErrorHandler {
-  return (err, c) => {
+  return async (err, c) => {
     const { logger, config, flash } = c.var
     if (err instanceof HTTPException && err.status < 500) {
       if (err.status === 401) {
-        flash.addFlash('error', 'You must be signed in to access that page.')
+        await flash.addFlash('error', 'You must be signed in to access that page.')
         if (isHtmxRequest(c)) {
           c.header('HX-Redirect', '/sign-in')
           return c.body(null, 401)

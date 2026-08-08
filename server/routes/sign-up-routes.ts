@@ -126,7 +126,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
           }
         })
 
-        flash.addFlash('success', 'Account created successfully. Please check your email to validate your account.')
+        await flash.addFlash('success', 'Account created successfully. Please check your email to validate your account.')
         return utils.redirect(c, '/sign-in')
       } catch (error) {
         utils.logError(logger, error, 'Error creating user')

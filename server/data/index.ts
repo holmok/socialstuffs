@@ -1,9 +1,4 @@
-import {
-  CamelCasePlugin,
-  Kysely,
-  PostgresDialect,
-  WithSchemaPlugin
-} from 'kysely'
+import { CamelCasePlugin, Kysely, PostgresDialect, WithSchemaPlugin } from 'kysely'
 import { Pool, type PoolConfig } from 'pg'
 import type { Logger } from 'pino'
 import type { AccountValidationTable } from './account-validation-token-data'
@@ -28,11 +23,7 @@ export * from './post-target-data'
 export * from './relation-data'
 export * from './user-data'
 
-export default function getDatabase(
-  poolOptions: PoolConfig,
-  schema: string,
-  _logger: Logger
-) {
+export default function getDatabase(poolOptions: PoolConfig, schema: string, _logger: Logger) {
   const logger = _logger.child({ module: 'database' })
   logger.info('Initializing database connection')
   return new Kysely<Database>({

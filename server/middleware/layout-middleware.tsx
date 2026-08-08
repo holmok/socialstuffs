@@ -18,14 +18,7 @@ export function layoutContext(): MiddlewareHandler {
       const user = c.var.auth.user
       const isAuthenticated = !!user
       return (
-        <Layout
-          title={title}
-          description={description}
-          styles={styles}
-          flashes={flashes}
-          isAuthenticated={isAuthenticated}
-          user={user}
-        >
+        <Layout title={title} description={description} styles={styles} flashes={flashes} isAuthenticated={isAuthenticated}>
           {children}
         </Layout>
       )

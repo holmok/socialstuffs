@@ -54,8 +54,7 @@ function renderCSS(styles: CSSObject): string {
     if (typeof value === 'object') {
       cssString += `${property} { ${renderCSS(value as CSSObject)} } `
     } else {
-      const cssValue =
-        typeof value === 'number' && value !== 0 ? `${value}px` : value
+      const cssValue = typeof value === 'number' && value !== 0 ? `${value}px` : value
       cssString += `${toKebabCase(property)}: ${cssValue}; `
     }
   }
