@@ -13,9 +13,14 @@ afterAll(async () => {
 })
 
 function signIn(ip: string) {
-  return app.request('/sign-in', {
+  // Origin must match the request origin so csrf() (registered before the routes) admits the POST.
+  return app.request('http://localhost/sign-in', {
     method: 'POST',
-    headers: { 'X-Forwarded-For': ip, 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'X-Forwarded-For': ip,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: 'http://localhost'
+    },
     body: 'email=&password='
   })
 }
