@@ -5,8 +5,8 @@ const Navigation = (props: NavigationProps) => {
   const { isAuthenticated } = props
   return (
     <nav aria-label="Main">
-      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="site-nav">
-        &#8801;
+      <button type="button" class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="site-nav">
+        <span aria-hidden="true">&#8801;</span>
       </button>
       <ul id="site-nav">
         <li>

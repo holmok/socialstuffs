@@ -8,14 +8,16 @@ type TextInputProps = {
   value?: string
   placeholder?: string
   required?: boolean
+  autocomplete?: string
   errors?: string[]
 }
 
 const TextInput: FC<PropsWithChildren<TextInputProps>> = (props) => {
-  const { id, name, label, type = 'text', value, placeholder, required = false, errors } = props
+  const { id, name, label, type = 'text', value, placeholder, required = false, autocomplete, errors } = props
+  const hasErrors = errors != null && errors.length > 0
   return (
     <div className="text-input">
-      <label htmlFor={id} className={errors && errors.length > 0 ? 'error' : undefined}>
+      <label htmlFor={id} className={hasErrors ? 'error' : undefined}>
         {label}
       </label>
       <input
@@ -25,10 +27,13 @@ const TextInput: FC<PropsWithChildren<TextInputProps>> = (props) => {
         value={value}
         placeholder={placeholder}
         required={required}
-        className={errors && errors.length > 0 ? 'error' : undefined}
+        autocomplete={autocomplete}
+        aria-invalid={hasErrors ? 'true' : undefined}
+        aria-describedby={hasErrors ? `${id}-errors` : undefined}
+        className={hasErrors ? 'error' : undefined}
       />
-      {errors && errors.length > 0 && (
-        <ul className="errors">
+      {hasErrors && (
+        <ul id={`${id}-errors`} className="errors">
           {errors.map((error, index) => (
             <li key={index}>{error}</li>
           ))}
