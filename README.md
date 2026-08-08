@@ -48,6 +48,7 @@ Checks:
 bun run typecheck   # tsc --noEmit
 bun run check       # biome lint + format check
 bun test            # bun:test — integration tests run against the dev database from .env
+bun run test:coverage  # bun test --coverage — report-only coverage (text table + lcov into coverage/)
 ```
 
 There is no build step; Bun runs the TypeScript directly. Tests live next to the code they cover (e.g. `server/routes/sign-up-flow.test.ts`) and seed uniquely-suffixed rows they clean up afterward.

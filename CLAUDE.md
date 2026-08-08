@@ -12,7 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `bunx biome check --write .` — apply lint/format fixes
 - `bun run ngrok` — run production mode plus an ngrok tunnel at ngrok.holmok.com (via `concurrently`)
 
-- `bun test` — run tests (`bun:test`, zero setup)
+- `bun test` — run tests (`bun:test`, zero setup; also `bun run test`)
+- `bun run test:coverage` — run tests with coverage (`bun test --coverage`): report-only — a per-file text table plus `coverage/lcov.info` (gitignored), no thresholds, plain `bun test` unaffected. Configured in `bunfig.toml` (`[test]`: text + lcov reporters, test files skipped)
 
 There is no build step; the server runs TypeScript directly via Bun. Tests live next to the code they cover (e.g. `server/routes/sign-up-routes.test.ts`). The integration tests run against the dev database from `.env` — they seed uniquely-suffixed rows and clean up in `afterAll`. `bun test` forces `NODE_ENV=test`, which the config's NODE_ENV enum accepts (`isDev` and `isProd` are both false under it).
 
