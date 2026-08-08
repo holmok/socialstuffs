@@ -5,6 +5,8 @@
     "start": "NODE_ENV=production bun run server/index.ts",
     "check": "biome check .",
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
     "ngrok": "concurrently \"bun run start\" \"ngrok http 3000 --url ngrok.holmok.com\""
   },
   "dependencies": {

@@ -1,0 +1,6 @@
+# Test coverage is report-only: enabled via `bun test --coverage` (bun run test:coverage),
+# never on plain `bun test`, and no thresholds are set.
+[test]
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coverageSkipTestFiles = true
