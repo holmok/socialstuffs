@@ -7,11 +7,11 @@ export type PostTable = {
   uid: ColumnType<string, never, never>
   userUid: ColumnType<string, string, never>
   userId: ColumnType<number, number, never>
-  content: ColumnType<string, string, string>
-  imageUrl: ColumnType<string | undefined, string | undefined, string | null | undefined>
-  linkUrl: ColumnType<string | undefined, string | undefined, string | undefined>
-  linkText: ColumnType<string | undefined, string | undefined, string | undefined>
-  status: ColumnType<PostStatus, PostStatus, PostStatus>
+  content: string
+  imageUrl: ColumnType<string | null, string | undefined, string | null | undefined>
+  linkUrl: ColumnType<string | null, string | undefined, string | null | undefined>
+  linkText: ColumnType<string | null, string | undefined, string | null | undefined>
+  status: PostStatus
   created: ColumnType<Date, never, never>
   updated: ColumnType<Date, never, Date>
 }

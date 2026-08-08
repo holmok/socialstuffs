@@ -7,7 +7,7 @@ export type PostTargetsTable = {
   postUid: ColumnType<string, string, never>
   userId: ColumnType<number, number, never>
   userUid: ColumnType<string, string, never>
-  type: ColumnType<PostTargetType, PostTargetType, PostTargetType>
+  type: PostTargetType
   created: ColumnType<Date, never, never>
   updated: ColumnType<Date, never, never>
 }

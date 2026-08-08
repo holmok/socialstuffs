@@ -3,9 +3,9 @@ import type { ColumnType, Generated, Insertable, Selectable, Updateable } from '
 export type KvStoreTable = {
   id: Generated<number>
   key: ColumnType<string, string, never>
-  value: ColumnType<string, string, string>
+  value: string
   created: ColumnType<Date, never, never>
-  expires: ColumnType<Date, Date, Date>
+  expires: Date
 }
 
 export type KeyValueData = Selectable<KvStoreTable>
