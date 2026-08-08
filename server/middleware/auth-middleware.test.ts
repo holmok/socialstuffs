@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, test } from 'bun:test'
-import { type AuthContext, authenticate, authorize, type UserContext } from '@middleware/auth-middleware'
+import { type AuthContext, authenticate, authorize, passwordVersion, type UserContext } from '@middleware/auth-middleware'
 import { configContext } from '@middleware/config-middleware'
 import { dataContext } from '@middleware/data-middleware'
 import { Hono } from 'hono'
 import { getSignedCookie, setSignedCookie } from 'hono/cookie'
+import { HTTPException } from 'hono/http-exception'
 import { sign, verify } from 'hono/jwt'
 import type { PinoLogger } from 'hono-pino'
 import pino from 'pino'
@@ -34,18 +35,6 @@ describe('authorize({ roles })', () => {
     const res = await appWithUser(undefined).request('/admin')
     expect(res.status).toBe(401)
   })
-
-  test('403s when the user role does not match', async () => {
-    const user: UserContext = { uid: 'u1', username: 'alice', status: 'active', role: 'user' }
-    const res = await appWithUser(user).request('/admin')
-    expect(res.status).toBe(403)
-  })
-
-  test('admits an active user with a matching role', async () => {
-    const user: UserContext = { uid: 'u1', username: 'alice', status: 'active', role: 'admin' }
-    const res = await appWithUser(user).request('/admin')
-    expect(res.status).toBe(200)
-  })
 })
 
 // The hono/jwt migration: exercise the real sign/verify + signed-cookie round-trip
@@ -54,11 +43,40 @@ describe('authorize({ roles })', () => {
 const config = LoadConfig()
 const { db } = createApp(config, logger)
 
+const suffix = Math.random().toString(36).slice(2, 10)
+
 afterAll(async () => {
+  await db.deleteFrom('users').where('normalizedEmail', 'like', `%${suffix}%`).execute()
   await db.destroy()
 })
 
-const claims: UserContext = { uid: 'u-jwt', username: 'jwtuser', status: 'active', role: 'user' }
+const claims: UserContext = { uid: 'u-jwt', username: 'jwtuser', status: 'active', role: 'user', pwv: 'test-pwv' }
+
+type SeededUser = { id: number; uid: string; username: string; passwordHash: string }
+
+async function seedUser(name: string, role: 'user' | 'admin' = 'user'): Promise<SeededUser> {
+  const username = `a${name}${suffix}`.slice(0, 15)
+  const email = `${name}-${suffix}@example.com`
+  const passwordHash = await Bun.password.hash('AuthzPass99!', { algorithm: 'bcrypt', cost: 10 })
+  const row = await db
+    .insertInto('users')
+    .values({
+      uid: `authz-${name}-${suffix}`,
+      username,
+      normalizedUsername: username.toLowerCase(),
+      email,
+      normalizedEmail: email.toLowerCase(),
+      passwordHash
+    })
+    .returning(['id', 'uid', 'username'])
+    .executeTakeFirstOrThrow()
+  await db.updateTable('users').set({ status: 'active', role }).where('id', '=', row.id).execute()
+  return { ...row, passwordHash }
+}
+
+function contextFor(u: SeededUser, over: Partial<UserContext> = {}): UserContext {
+  return { uid: u.uid, username: u.username, status: 'active', role: 'user', pwv: passwordVersion(u.passwordHash), ...over }
+}
 
 function authApp() {
   const app = new Hono()
@@ -105,7 +123,18 @@ function authApp() {
     })
     return c.json({ ok: true })
   })
+  // mints a valid cookie for arbitrary claims via the production setUser path
+  app.post('/mint-user', async (c) => {
+    const body = (await c.req.json()) as UserContext
+    await c.var.auth.setUser(body)
+    return c.json({ ok: true })
+  })
+  app.get('/protected', authorize({ requireAuth: true }), (c) => c.text('ok'))
+  app.get('/admin', authorize({ roles: ['admin'] }), (c) => c.text('ok'))
   app.get('/whoami', (c) => c.json({ user: c.var.auth.user ?? null }))
+  // build error responses through the context (like the real errorHandler) so
+  // headers set before a throw — e.g. authorize()'s cookie clear — are preserved
+  app.onError((err, c) => (err instanceof HTTPException ? c.text(err.message, err.status) : c.text('error', 500)))
   // unwraps the signed auth cookie and returns the decoded jwt exp
   app.get('/exp', async (c) => {
     const token = await getSignedCookie(c, config.auth.cookieSecret, config.auth.userCookieName)
@@ -210,5 +239,78 @@ describe('hono/jwt sign/verify', () => {
     const exp = Math.floor(Date.now() / 1000) - 60
     const token = await sign({ ...claims, exp }, config.auth.jwtSecret, 'HS256')
     await expect(verify(token, config.auth.jwtSecret, 'HS256')).rejects.toThrow()
+  })
+})
+
+async function mintCookieFor(app: Hono, user: UserContext): Promise<string> {
+  const minted = await app.request('/mint-user', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user)
+  })
+  return userCookie(minted)
+}
+
+describe('authorize() DB re-check (revocation)', () => {
+  test('an active user is admitted; the admin route enforces the DB role, not the claim', async () => {
+    const app = authApp()
+    const u = await seedUser('ok')
+    const cookie = await mintCookieFor(app, contextFor(u))
+    expect((await app.request('/protected', { headers: { cookie } })).status).toBe(200)
+    expect((await app.request('/admin', { headers: { cookie } })).status).toBe(403)
+  })
+
+  test('an admin by DB role is admitted to the admin route', async () => {
+    const app = authApp()
+    const u = await seedUser('adm', 'admin')
+    const cookie = await mintCookieFor(app, contextFor(u, { role: 'admin' }))
+    expect((await app.request('/admin', { headers: { cookie } })).status).toBe(200)
+  })
+
+  test('flipping the DB status revokes an existing session immediately: 401 + cookie cleared', async () => {
+    const app = authApp()
+    const u = await seedUser('ban')
+    const cookie = await mintCookieFor(app, contextFor(u))
+    expect((await app.request('/protected', { headers: { cookie } })).status).toBe(200)
+
+    await db.updateTable('users').set({ status: 'inactive' }).where('id', '=', u.id).execute()
+    const res = await app.request('/protected', { headers: { cookie } })
+    expect(res.status).toBe(401)
+    const cleared = clearedCookieHeader(res)
+    expect(cleared).toBeDefined()
+    expect(cleared).toContain('Max-Age=0')
+  })
+
+  test('a password change revokes tokens minted against the old hash: 401 + cookie cleared', async () => {
+    const app = authApp()
+    const u = await seedUser('pw')
+    const cookie = await mintCookieFor(app, contextFor(u))
+    expect((await app.request('/protected', { headers: { cookie } })).status).toBe(200)
+
+    const newHash = await Bun.password.hash('BrandNewPass99!', { algorithm: 'bcrypt', cost: 10 })
+    await db.updateTable('users').set({ passwordHash: newHash }).where('id', '=', u.id).execute()
+    const res = await app.request('/protected', { headers: { cookie } })
+    expect(res.status).toBe(401)
+    const cleared = clearedCookieHeader(res)
+    expect(cleared).toBeDefined()
+    expect(cleared).toContain('Max-Age=0')
+  })
+
+  test('a demoted admin loses the admin route but keeps plain authenticated access', async () => {
+    const app = authApp()
+    const u = await seedUser('dem', 'admin')
+    const cookie = await mintCookieFor(app, contextFor(u, { role: 'admin' }))
+    expect((await app.request('/admin', { headers: { cookie } })).status).toBe(200)
+
+    await db.updateTable('users').set({ role: 'user' }).where('id', '=', u.id).execute()
+    expect((await app.request('/admin', { headers: { cookie } })).status).toBe(403)
+    expect((await app.request('/protected', { headers: { cookie } })).status).toBe(200)
+  })
+
+  test('valid claims with no matching user row are rejected', async () => {
+    const app = authApp()
+    const cookie = await mintCookieFor(app, claims) // u-jwt has no users row
+    const res = await app.request('/protected', { headers: { cookie } })
+    expect(res.status).toBe(401)
   })
 })
