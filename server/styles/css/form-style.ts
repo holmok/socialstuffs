@@ -83,6 +83,23 @@ export default {
     'button:hover': {
       backgroundColor: colors.accentOrange
     },
+    'button:disabled': {
+      opacity: '0.6',
+      cursor: 'not-allowed'
+    },
+    'button:disabled:hover': {
+      backgroundColor: colors.accentBlue
+    },
+    '.form-indicator': {
+      display: 'none',
+      textAlign: 'center',
+      fontSize: vars.fontSizeSmall,
+      color: colors.fgMuted,
+      marginTop: vars.spacingSmall
+    },
+    '.form-indicator.htmx-request': {
+      display: 'block'
+    },
     '.form-links': {
       display: 'flex',
       justifyContent: 'space-between',
