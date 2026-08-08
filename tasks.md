@@ -8,7 +8,8 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 - **Phase 2 complete** (merged): PR [#6](https://github.com/holmok/socialstuffs/pull/6) JWT expiry + secure cookies (2.1), [#7](https://github.com/holmok/socialstuffs/pull/7) token entropy (2.5), [#8](https://github.com/holmok/socialstuffs/pull/8) sign-out POST + authorize (2.7, 2.8), [#9](https://github.com/holmok/socialstuffs/pull/9) middleware pipeline + secure headers + CSRF (2.3, 2.4), [#10](https://github.com/holmok/socialstuffs/pull/10) rate limiting + timing-oracle fix (2.6); docs [#11](https://github.com/holmok/socialstuffs/pull/11).
 - **Phase 3 complete** (merged): PR [#12](https://github.com/holmok/socialstuffs/pull/12) rate-limit test fix, [#13](https://github.com/holmok/socialstuffs/pull/13) password echo (3.4), [#14](https://github.com/holmok/socialstuffs/pull/14) log redaction (3.5), [#15](https://github.com/holmok/socialstuffs/pull/15) sign-up integrity (3.1, 3.2, 3.3); docs [#16](https://github.com/holmok/socialstuffs/pull/16).
 - **Phase 4 complete** (merged): PR [#17](https://github.com/holmok/socialstuffs/pull/17) form PE + feedback + a11y (4.1, 4.2, 4.4), [#18](https://github.com/holmok/socialstuffs/pull/18) preserve forms on error (4.3), [#19](https://github.com/holmok/socialstuffs/pull/19) password recovery (4.5); docs [#20](https://github.com/holmok/socialstuffs/pull/20).
-- **Phase 5 open for review** (not yet merged): PR [#21](https://github.com/holmok/socialstuffs/pull/21) email client/template reuse (5.4), [#22](https://github.com/holmok/socialstuffs/pull/22) kvStorage sweep + pool/shutdown/logging hardening (5.2, 5.5), [#23](https://github.com/holmok/socialstuffs/pull/23) cheap flash reads (5.1), [#24](https://github.com/holmok/socialstuffs/pull/24) versioned/immutable static caching + ETag (5.3). This docs PR should merge alongside/after them.
+- **Phase 5 complete** (merged): PR [#21](https://github.com/holmok/socialstuffs/pull/21) email client/template reuse (5.4), [#22](https://github.com/holmok/socialstuffs/pull/22) kvStorage sweep + pool/shutdown/logging hardening (5.2, 5.5), [#23](https://github.com/holmok/socialstuffs/pull/23) cheap flash reads (5.1), [#24](https://github.com/holmok/socialstuffs/pull/24) versioned/immutable static caching + ETag (5.3); docs [#25](https://github.com/holmok/socialstuffs/pull/25).
+- **Phase 6 open for review** (not yet merged): PR [#26](https://github.com/holmok/socialstuffs/pull/26) Kysely types + dead code (6.3, 6.6-part), [#27](https://github.com/holmok/socialstuffs/pull/27) tsconfig light touch (6.5), [#28](https://github.com/holmok/socialstuffs/pull/28) hono/jwt migration (6.4), [#29](https://github.com/holmok/socialstuffs/pull/29) Zod 4 + pino wiring/typing + APP_NAME (6.1, 6.2, 6.6-part). This docs PR should merge alongside/after them.
 
 ---
 
@@ -89,26 +90,21 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 
 ## Phase 6 — Idioms, types, and hygiene
 
-- [ ] **6.1 Fix pino wiring and logger typing** (F26)
-  Dev: pretty transport only (the multistream is currently discarded). Prod: explicit per-stream `level`. Type `c.var.logger` as hono-pino's `PinoLogger`; use `c.var.logger` (not the module-scope logger) inside handlers.
+- [x] **6.1 Fix pino wiring and logger typing** (F26) — *PR #29: dev = pretty transport only (dead multistream removed); prod multistream entries carry an explicit `level` (from `config.logLevel`) so `LOG_LEVEL=debug` emits; `c.var.logger` retyped to hono-pino's `PinoLogger`; a handler-scope logger switched to `c.var.logger`*
 
-- [ ] **6.2 Zod 4 idioms** (F27)
-  `z.coerce.number().int().positive()` for numeric env vars; `z.url()`/`z.email()` where applicable; `message:` → `error:`; replace `validateFormData` internals with `z.flattenError` — or adopt `@hono/zod-validator` and delete it (pairs with 3.2).
+- [x] **6.2 Zod 4 idioms** (F27) — *PR #29: `z.coerce.number().int()` env numerics (`.nonnegative()` for MIN_CLIENTS), `z.url()`/`z.email()`, `message:`→`error:`, `validateFormData` uses `z.flattenError`. Kept the hand-rolled `validateFormData` (didn't adopt `@hono/zod-validator`)*
 
-- [ ] **6.3 Honest Kysely types** (F28)
-  `| null` on `claimed`, `lastLogin`, `imageUrl`; collapse `ColumnType<X,X,X>` triples; align the `uid` generated-vs-supplied convention; optionally wire Kysely's `log` hook to pino.
+- [x] **6.3 Honest Kysely types** (F28) — *PR #26: `| null` on `lastLogin`/`imageUrl`/`linkUrl`/`linkText` (`claimed` was already fixed in #3/#5); `ColumnType<X,X,X>` triples collapsed. `uid` generated-vs-supplied inconsistency flagged but left (no posts insert site yet). Kysely `log` hook not wired (optional)*
 
-- [ ] **6.4 Consider `hono/jwt`** (F29)
-  Replace `jsonwebtoken` with Hono's built-in Web-Crypto JWT (drops a CommonJS dep and `@types/jsonwebtoken`). Best done as part of, or right after, 2.1 since it touches the same lines.
+- [x] **6.4 hono/jwt migration** (F29) — *PR #28: `jsonwebtoken` → `hono/jwt` (Web-Crypto async sign/verify, `exp` in seconds, HS256 pinned), `jsonwebtoken` + `@types/jsonwebtoken` removed. Verified against hono source: exp enforced, alg-confusion + alg:none rejected*
 
-- [ ] **6.5 tsconfig modernization** (F34)
-  `module: "Preserve"`, `moduleResolution: "bundler"`, `target: "ESNext"`, `noEmit: true`, `verbatimModuleSyntax: true`; consider `noUncheckedIndexedAccess`.
+- [x] **6.5 tsconfig modernization** (F34) — *PR #27: light touch — explicit `module: Preserve`/`moduleResolution: bundler`/`target: ESNext`/`lib: [ESNext]`/`noEmit`. Deferred the rippling flags: `verbatimModuleSyntax` and `noUncheckedIndexedAccess` (see follow-up below)*
 
-- [ ] **6.6 Dead-code sweep** (F36)
-  Remove `card.tsx`, `cachedQueries` (or implement it deliberately), unused `baseImageUrl`, `Layout`'s `user` prop; rename `APP_NAME` from the `bun-hono-htmx` boilerplate; keep `passwordRecoveryTokens` only if 4.5 goes the "implement" route; `auth.getUser` may become live via 1.4/2.1 — decide then.
+- [x] **6.6 Dead-code sweep** (F36) — *PR #26 deleted `card.tsx` + the unused `cachedQueries` type; PR #29 renamed `APP_NAME` → `socialstuffs`. `Layout.user` was already removed in #4. Deliberately KEPT: `baseImageUrl` (forward-looking, matches the schema's image columns) and `auth.getUser` (legitimate documented API). `passwordRecoveryTokens` stays (live via #19)*
 
-- [ ] **6.7 Update CLAUDE.md** (F35)
-  Correct the static cache TTL, document session/flash/layout middleware and the flash system, and fold in any architecture changes from Phases 2–5.
+- [x] **6.7 Update CLAUDE.md** (F35) — *done incrementally: each phase shipped a docs PR (#11, #16, #20, #25, and this one) keeping CLAUDE/README/audit/tasks in sync*
+
+**Phase 6 follow-up (deferred, optional):** the stricter tsconfig flags `verbatimModuleSyntax` + `noUncheckedIndexedAccess` (they ripple `import type`/null-check edits across the codebase — a dedicated sequential PR if wanted); wiring Kysely's `log` hook to pino; aligning the `posts.uid` convention when posts get query sites.
 
 ## Phase 7 — Test suite (interleave, don't defer)
 
