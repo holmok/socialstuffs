@@ -8,6 +8,8 @@ import Routes from '@routes/index'
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
 import { compress } from 'hono/compress'
+import { csrf } from 'hono/csrf'
+import { secureHeaders } from 'hono/secure-headers'
 import type { Logger } from 'pino'
 import type { Config } from '@/config'
 
@@ -34,16 +36,42 @@ export function createApp(config: Config, logger: Logger) {
   app.use(m.loggerContext(logger))
   app.use(m.dataContext(db))
   app.use(m.apiContext(api))
+  app.use(compress())
+  app.use(
+    secureHeaders({
+      contentSecurityPolicy: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        frameAncestors: ["'none'"]
+      },
+      xFrameOptions: 'DENY'
+    })
+  )
+  app.use('/js/*', m.staticCache(config), serveStatic({ root: './static' }))
+  app.on(
+    'GET',
+    [
+      '/favicon.ico',
+      '/favicon-16x16.png',
+      '/favicon-32x32.png',
+      '/apple-touch-icon.png',
+      '/android-chrome-192x192.png',
+      '/android-chrome-512x512.png',
+      '/robots.txt',
+      '/site.webmanifest'
+    ],
+    m.staticCache(config),
+    serveStatic({ root: './static' })
+  )
+  app.use(csrf())
   app.use(m.authenticate())
   app.use(m.session())
   app.use(m.flash())
   app.use(m.layoutContext())
-  app.use(compress())
 
   Routes(app, logger)
-
-  app.use('/*', m.staticCache(config))
-  app.use('/*', serveStatic({ root: './static' }))
 
   app.notFound(m.notFoundHandler())
   app.onError(m.errorHandler())
