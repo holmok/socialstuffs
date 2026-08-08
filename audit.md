@@ -5,6 +5,8 @@
 
 **Overall shape:** The architecture is clean and idiomatic in its bones — typed `ContextVariableMap`, small single-purpose middleware, parameterized Kysely everywhere (no SQL injection surface), auto-escaping JSX (no XSS found), `Bun.password` bcrypt, signed cookies, correct `HX-Redirect`/303 handling. The problems cluster in four places: **the account-validation flow is actually broken**, **auth sessions are effectively permanent and status is never enforced**, **the flash/session layer has races and runs where it shouldn't**, and **a set of one-line hardening wins (secure cookies, secureHeaders, csrf, jwt try/catch) were never applied**.
 
+**Resolution status (updated 2026-08-07):** All P0 findings are fixed and merged — F1 (PR [#3](https://github.com/holmok/socialstuffs/pull/3)), F2 (PR [#1](https://github.com/holmok/socialstuffs/pull/1)), F3 + F4 (PR [#2](https://github.com/holmok/socialstuffs/pull/2)); F5 and F6 remain open. Also fixed: F11 and F32 (PR [#4](https://github.com/holmok/socialstuffs/pull/4)); partial progress on F25 (validate-account no longer logs tokens) and F28 (`claimed` type fixed for validation tokens only). See [tasks.md](tasks.md) for the live checklist.
+
 **Priority scale:**
 - **P0 — Broken or exploitable now.** Fix before anything else.
 - **P1 — High.** Security posture or data-integrity gaps that will bite as soon as real users arrive.
@@ -16,7 +18,7 @@
 ## P0 — Broken or exploitable now
 
 ### F1. Account validation is broken by column shadowing in a `selectAll()` join
-`server/routes/sign-up-routes.ts:143-193`
+`server/routes/sign-up-routes.ts:143-193` — ✅ **Fixed** (PR #3): explicit columns, 48h expiry, atomic transactional claim by token, regression test added.
 
 The `/validate-account/:token/:uid` handler joins `users` to `accountValidationTokens` and calls `.selectAll()` (i.e. `SELECT *`). Both tables have an `id`, `created`, and overlapping timestamps; node-postgres builds row objects by field name, so **the token table's columns overwrite the user's** — `user.id` is actually the token row's id.
 
@@ -50,21 +52,21 @@ await db.transaction().execute(async (trx) => {
 Never `selectAll()` across a join — alias explicitly.
 
 ### F2. Undeclared dependencies — a fresh clone does not run
-`server/middleware/session-middleware.ts:1`, `package.json`, `bun.lock`
+`server/middleware/session-middleware.ts:1`, `package.json`, `bun.lock` — ✅ **Fixed** (PR #1): `date-fns` dropped for plain Date math; `@types/jsonwebtoken` + `@types/pg` declared. Follow-up: `typescript` itself is still not a devDependency (tasks.md 1.6).
 
 `date-fns` is imported but appears in neither `package.json` nor `bun.lock` (verified: zero matches in the lockfile; it only exists loose in `node_modules`). `@types/jsonwebtoken` and `@types/pg` are likewise unmanifested. A fresh clone + `bun install` fails at runtime on the `date-fns` import, and `tsc --noEmit` fails on the missing type packages.
 
 **Fix:** `bun add date-fns && bun add -d @types/jsonwebtoken @types/pg` — or drop `date-fns` entirely; its single use (`addDays(new Date(), 1)` for kv expiry) is one line of plain Date math.
 
 ### F3. Unguarded `jwt.verify` bricks the site for affected users
-`server/middleware/auth-middleware.ts:36`
+`server/middleware/auth-middleware.ts:36` — ✅ **Fixed** (PR #2): try/catch, HS256 pinned, cookie cleared, continues unauthenticated.
 
 `jwt.verify(token, secret)` runs on every request with no try/catch. The signed-cookie HMAC only proves client-side integrity; verify still throws if `JWT_SECRET` is rotated, the payload is malformed, or an `exp` claim is ever added and lapses. The throw recurs on **every request** from that browser → persistent 500s until the user manually clears cookies. Rotating `JWT_SECRET` (a normal incident response) would brick every logged-in user. Worse, because `authenticate()` runs before `layoutContext()` (`server/server.ts:37-40`), the error renders through Hono's default renderer as a bare unstyled fragment. The result is also cast `as UserContext` with no shape validation.
 
 **Fix:** Wrap in try/catch; on failure clear the cookie and continue as signed-out. Pass `{ algorithms: ['HS256'] }`. Optionally validate claims with a small Zod schema instead of the cast.
 
 ### F4. Sign-in never checks `user.status` — email validation gates nothing
-`server/routes/sign-in-routes.ts:37-56`
+`server/routes/sign-in-routes.ts:37-56` — ✅ **Fixed** (PR #2): sign-in admits only `active`; `authorize()` 401s non-active. Note: JWT status is a sign-in-time snapshot until F5 (JWT expiry) lands.
 
 After password verification, `user.status` (`pending | active | deleted | inactive`) is copied into the JWT (line 55) and **never checked anywhere** — not at sign-in, not in `authorize()`. A `pending` (unvalidated) user signs in normally, so the entire validation-token flow is decorative. `deleted`/`inactive` (banned) users also sign in normally.
 
@@ -117,7 +119,7 @@ Both forms have only `hx-post` — no `action`/`method`. If htmx fails to load (
 **Fix:** Add `action="/sign-in" method="post"` (resp. `/sign-up`) alongside the `hx-post` attributes.
 
 ### F11. `flash.addFlash(...)` is fire-and-forget at all four call sites
-`server/routes/sign-in-routes.ts:60`, `server/routes/sign-up-routes.ts:129`, `server/routes/user-routes.ts:21`, `server/middleware/error-middleware.ts:35`
+`server/routes/sign-in-routes.ts:60`, `server/routes/sign-up-routes.ts:129`, `server/routes/user-routes.ts:21`, `server/middleware/error-middleware.ts:35` — ✅ **Fixed** (PR #4): all four awaited; `errorHandler` made async. Caveat: Biome's `noFloatingPromises` cannot see through `c.var` typing, so it won't catch a recurrence of this class.
 
 Flagged independently by three review passes. `addFlash` performs a kv read + upsert (two sequential queries), but every caller drops the promise. The redirect response goes out immediately; the browser's follow-up GET calls `getFlashes()` and can race ahead of the uncommitted write — the flash silently vanishes (the classic intermittent "my message didn't show" bug). A DB error inside becomes an unhandled rejection with no request context. The error-middleware case fires on every 401.
 
@@ -224,7 +226,7 @@ Expired rows are deleted only if that exact key is read again. Every abandoned s
 
 **Fix:** Construct the client once in the `EmailAPI` constructor; cache template text in the existing `templates` map. Send after responding, or treat failure as non-fatal per F9.
 
-### F25. Secrets and PII flow into logs (shipped to Axiom in prod); no `redact` configured
+### F25. Secrets and PII flow into logs (shipped to Axiom in prod); no `redact` configured — ⚠️ partially fixed (PR #3 removed tokens from validate-account logs; email payload + `redact` remain)
 `server/routes/sign-up-routes.ts:160-171`, `server/routes/sign-in-routes.ts:40`, `server/api/email-api.ts:40`, `server/config.ts:49-73`
 
 The `/validate-account` failure paths log the raw token at `warn` — the line-160 path fires while the token is still **valid and unclaimed**, so live secrets land in logs. Sign-in failures log the attempted email. `email-api.ts:40` debug-logs the full email payload including the validation URL. Neither pino config sets `redact`.
@@ -245,7 +247,7 @@ Three distinct issues: (a) in dev, `config.pino` contains `transport: pino-prett
 
 `z.string().default('3000').transform(Number)` for PORT and pool sizes: `Number('abc')` silently yields NaN — no validation. Zod 4's idiom is `z.coerce.number().int().positive().default(3000)`; also `z.url()` for `DATABASE_URL`/`BASE_LINK_URL`, `z.email()` for `FROM_EMAIL`. `validateFormData` hand-reimplements `z.flattenError` and returns an unsound cast (see F15). `z.email({ message: ... })` uses the deprecated v3 param name — v4 renamed it to `error`. `@hono/zod-validator` (`zValidator('form', schema, hook)`) would replace the whole formData→cast→validate dance including the error re-render.
 
-### F28. Kysely: nullable columns typed as non-nullable or `undefined`
+### F28. Kysely: nullable columns typed as non-nullable or `undefined` — ⚠️ partially fixed (PR #3 corrected `claimed` for validation tokens; password-recovery `claimed`, `lastLogin`, `imageUrl` remain)
 `server/data/account-validation-token-data.ts:7`, `server/data/password-recovery-token-data.ts:7`, `server/data/user-data.ts:21`, `server/data/post-data.ts:11-13`
 
 `claimed` is typed `ColumnType<Date, never, Date>` but is NULL until claimed — the validate-account code relies on its falsiness, contradicting the type. `lastLogin` is non-null `Date` but never written. `imageUrl` selects as `string | undefined`; pg returns `null`. These types will type-check code that breaks at runtime (`claimed.getTime()` on null). Minor consistency notes: `ColumnType<X,X,X>` triples should just be `X`; `posts.uid` is db-generated while `users.uid`/`comments.uid` are app-supplied — pick one convention; `relations.updated`/`postTargets.updated` are never-updateable unlike every other table.
@@ -276,7 +278,7 @@ Network-level failures (offline, server down) do nothing visible — button stay
 - Measured contrast failures: placeholder `#66758a` on `#3d4656` = **2.03:1**; error placeholder = 2.12:1 (AA needs 4.5:1). All other measured pairs pass AA.
 
 ### F32. Biome check currently fails (8 errors)
-Repo-wide
+Repo-wide — ✅ **Fixed** (PR #4): `biome check .` exits clean; email templates parse via `html.parser.interpolation`; dead `user` prop removed.
 
 One real lint hit (`main-layout.tsx:19` — `user` prop destructured, never used), formatting drift in three files, and Biome's HTML parser tripping on `{{url}}` in `templates/email/*.html` (exclude that dir or enable `html.parser.interpolation`). Consider enabling type-aware `noFloatingPromises` — it would have caught F11 mechanically.
 

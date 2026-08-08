@@ -2,33 +2,33 @@
 
 Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases are ordered by dependency and severity; tasks within a phase are independent unless noted. Each task is scoped to roughly one sitting.
 
+**Status (2026-08-07):** Phase 1 complete — merged as PR [#1](https://github.com/holmok/socialstuffs/pull/1) (deps), [#2](https://github.com/holmok/socialstuffs/pull/2) (auth hardening), [#3](https://github.com/holmok/socialstuffs/pull/3) (validate-account), [#4](https://github.com/holmok/socialstuffs/pull/4) (lint baseline). PR #4 also completed task 2.2, and PR #3 completed 7.1 and the validate-account portion of 3.5. New follow-ups from review are listed at the end of Phase 1.
+
 ---
 
 ## Phase 1 — Stop the bleeding (broken now)
 
-- [ ] **1.1 Declare missing dependencies** (F2)
-  `bun add date-fns && bun add -d @types/jsonwebtoken @types/pg` — or replace the single `dateFns.addDays` call in `session-middleware.ts` with plain Date math and skip the dep. Verify with a clean `rm -rf node_modules && bun install && bun run typecheck`.
+- [x] **1.1 Declare missing dependencies** (F2) — *done, PR #1: dropped `date-fns` for plain Date math, added the two `@types` dev deps*
 
-- [ ] **1.2 Fix the `/validate-account` column-shadowing bug** (F1)
-  In `sign-up-routes.ts:143-193`: drop the `selectAll()` join; query the token by `token` with explicit columns, then claim atomically (`set claimed where token = ? and claimed is null … returning userId`) and activate the user inside one `db.transaction()`. Add a token max-age check (24–48 h) while in there.
-  *Write the integration test first (seed user + token with non-aligned ids) — it fails today and proves the fix.*
+- [x] **1.2 Fix the `/validate-account` column-shadowing bug** (F1) — *done, PR #3: explicit columns, 48h expiry, atomic transactional claim, regression test written first*
+- [x] **1.3 Guard `jwt.verify`** (F3) — *done, PR #2: try/catch, HS256 pinned, cookie cleared, warn log with error name only*
 
-- [ ] **1.3 Guard `jwt.verify`** (F3)
-  `auth-middleware.ts:36`: try/catch; on failure clear the cookie and continue unauthenticated. Pass `{ algorithms: ['HS256'] }`.
+- [x] **1.4 Enforce `user.status` at sign-in** (F4) — *done, PR #2: status branch at sign-in + `authorize()` 401s non-active users. Known limit: JWT status is a sign-in-time snapshot until 2.1 lands*
 
-- [ ] **1.4 Enforce `user.status` at sign-in** (F4)
-  `sign-in-routes.ts`: after password verify, `pending` → "please validate your email" message; `deleted`/`inactive` → generic invalid sign-in. Also make `authorize()` reject non-active statuses.
+- [x] **1.5 Fix Biome + typecheck baseline** (F32) — *done, PR #4: `biome check .` clean, dead `user` prop removed, email templates parse via `html.parser.interpolation`. `noFloatingPromises` is enabled but cannot see through Hono's `c.var` typing — do not rely on it to catch floating flash/session writes*
 
-- [ ] **1.5 Fix Biome + typecheck baseline** (F32)
-  `bunx biome check --write .`, remove the unused `user` prop in `main-layout.tsx`, exclude `templates/email/` from Biome's HTML parsing. Enable `noFloatingPromises` (it enforces 2.2 mechanically). Goal: `bun run check` and `bun run typecheck` both clean, and keep them clean through every phase below.
+**Follow-ups surfaced by Phase 1 reviews:**
+
+- [ ] **1.6** Add `typescript` as a devDependency — `bun run typecheck` currently relies on a global tsc (same class of problem as F2)
+- [ ] **1.7** Fix the same `claimed` type lie in `password-recovery-token-data.ts:7` that PR #3 fixed for validation tokens (fold into 6.3, or into 4.5 when password recovery is built)
+- [ ] **1.8** Add `'test'` to the `NODE_ENV` Zod enum in `config.ts` so tests stop pinning `NODE_ENV=development` (pairs with any Phase 7 work)
 
 ## Phase 2 — Session & auth hardening
 
 - [ ] **2.1 JWT expiry + secure cookies** (F5, F6)
   Add `expiresIn: '7d'` (or shorter) to `jwt.sign` and matching `maxAge` on the cookie; add `secure: config.mode.isProd` to all three `setSignedCookie` sites (auth set/clear, session). Depends on 1.3 (expired JWTs must not 500).
 
-- [ ] **2.2 Await the four `addFlash` calls** (F11)
-  `sign-in-routes.ts:60`, `sign-up-routes.ts:129`, `user-routes.ts:21`, `error-middleware.ts:35`. One `await` each.
+- [x] **2.2 Await the four `addFlash` calls** (F11) — *done early, PR #4: all four awaited; `errorHandler` made async for the 401 path*
 
 - [ ] **2.3 Serve static assets before the middleware chain** (F12)
   Move `serveStatic` + `staticCache` registration ahead of auth/session/flash/layout in `server.ts` (or scope those middleware away from asset paths). Fixes the first-visit session-id clobber race and removes per-asset JWT/HMAC/logging work.
@@ -62,8 +62,7 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 - [ ] **3.4 Stop echoing passwords into HTML** (F17)
   Strip `password`/`confirmPassword` from props before re-rendering both forms.
 
-- [ ] **3.5 Stop logging secrets; add pino `redact`** (F25)
-  Remove raw token from the validate-account warn logs (log a hash/last-4), drop the email payload from `email-api.ts:40`'s debug log, add a `redact` config with paths for cookies/passwords/tokens/urls.
+- [ ] **3.5 Stop logging secrets; add pino `redact`** (F25) — *partially done: PR #3 removed raw tokens from the validate-account logs. Remaining: the email payload in `email-api.ts` debug log, and the `redact` config*
 
 ## Phase 4 — Frontend resilience & accessibility
 
@@ -126,7 +125,7 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 
 Targets in value order — 7.1 belongs inside task 1.2, and 7.2/7.3 should land with Phases 2–3 rather than after:
 
-- [ ] **7.1** `/validate-account` integration (non-aligned ids, reuse, expiry, wrong uid) — *part of 1.2*
+- [x] **7.1** `/validate-account` integration (non-aligned ids, reuse, expiry, wrong uid) — *done, PR #3: `server/routes/sign-up-routes.test.ts`, 5 tests against the real dev DB with full cleanup*
 - [ ] **7.2** Sign-up POST (duplicates incl. normalize-email aliases, malformed payloads, failure-after-insert)
 - [ ] **7.3** Sign-in + auth round-trip (statuses, garbage/rotated-secret cookie, JWT expiry)
 - [ ] **7.4** Flash/session lifecycle (add→render→clear, expiry, redirect race, first-visit parallel requests)

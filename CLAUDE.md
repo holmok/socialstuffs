@@ -12,7 +12,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `bunx biome check --write .` — apply lint/format fixes
 - `bun run ngrok` — run production mode plus an ngrok tunnel at ngrok.holmok.com (via `concurrently`)
 
-There is no test suite or build step; the server runs TypeScript directly via Bun.
+- `bun test` — run tests (`bun:test`, zero setup)
+
+There is no build step; the server runs TypeScript directly via Bun. Tests live next to the code they cover (e.g. `server/routes/sign-up-routes.test.ts`). The integration tests run against the dev database from `.env` — they seed uniquely-suffixed rows and clean up in `afterAll`. Note: `bun test` forces `NODE_ENV=test`, which the config's Zod enum rejects, so tests pin `process.env.NODE_ENV = 'development'` before `LoadConfig()`.
 
 ## What this is
 
@@ -26,9 +28,9 @@ Startup flow: `server/index.ts` loads config, creates the pino logger (stdout al
 
 1. Creates the Kysely database instance via `data()` (`server/data/index.ts`) and the `API` class (`server/api/index.ts`).
 2. Registers context middleware (`server/middleware/`) that puts `config`, `logger`, `db`, `api`, and `auth` on Hono's context — available in any handler via `c.var` / `c.get(...)`. The `ContextVariableMap` declaration in `server/server.ts` types these.
-3. Registers `authenticate()` middleware and `compress()`.
+3. Registers `authenticate()`, the session middleware (signed session-id cookie, values stored in the `kvStorage` table), the flash-message middleware (`c.var.flash`, session-backed; always `await` `addFlash`), the layout renderer (`jsxRenderer` via `server/middleware/layout-middleware.tsx`), and `compress()`.
 4. Registers routes via `Routes()` (`server/routes/index.ts`), which delegates to route-group files like `public-routes.ts`. New route groups get their own file and are registered in `routes/index.ts`.
-5. Falls back to serving static assets from `static/` (favicons, vendored `htmx.min.js`, `nav.js`), with `staticCache` middleware setting `Cache-Control` (`public, max-age=3600` in production, `no-store` in development).
+5. Falls back to serving static assets from `static/` (favicons, vendored `htmx.min.js`, `nav.js`), with `staticCache` middleware setting `Cache-Control` (`public, max-age=2592000` — 30 days — in production, `no-store` in development).
 6. Registers `notFoundHandler` and `errorHandler` (`server/middleware/error-middleware.ts`): both render the error page, or the `ErrorFragment` component when the request came from HTMX (`HX-Request` header); 401s redirect to `/sign-in` (via `HX-Redirect` for HTMX requests); 5xx responses include the stack trace only in development.
 
 ### Data layer (`server/data/`)
@@ -41,7 +43,7 @@ The `API` class is the container for external service clients, exposed as `c.var
 
 ### Auth
 
-`authenticate()` (`server/middleware/auth-middleware.ts`) runs on every request: it reads a signed cookie, verifies the JWT inside it, and sets `c.var.auth` with `user` (the JWT claims: `uid`, `username`, `status`, `role`), `getUser()` (loads the full user row from the db), and `setUser()` (signs a JWT and sets the signed cookie). `authorize({ requireAuth, roles })` is a per-route middleware that throws 401/403 `HTTPException`s. Passwords are hashed with `Bun.password` (bcrypt). Sign-up validates form data with Zod (`validateFormData` in `server/utils.ts`), normalizes email (`normalize-email`) and username for uniqueness checks, and emails an account-validation link (token created with `uniquey`); `/validate-account/:token/:uid` claims the token and activates the user.
+`authenticate()` (`server/middleware/auth-middleware.ts`) runs on every request: it reads a signed cookie, verifies the JWT inside it (verification failures are caught — the cookie is cleared and the request continues unauthenticated), and sets `c.var.auth` with `user` (the JWT claims: `uid`, `username`, `status`, `role`), `getUser()` (loads the full user row from the db), and `setUser()` (signs a JWT and sets the signed cookie). `authorize({ requireAuth, roles })` is a per-route middleware that throws 401/403 `HTTPException`s; it also 401s users whose JWT `status` is not `active`. Passwords are hashed with `Bun.password` (bcrypt). Sign-in only admits users with `status === 'active'` (`pending` gets a "validate your email" message; `deleted`/`inactive` get the same generic error as bad credentials). Sign-up validates form data with Zod (`validateFormData` in `server/utils.ts`), normalizes email (`normalize-email`) and username for uniqueness checks, and emails an account-validation link (token created with `uniquey`); `/validate-account/:token/:uid` claims the token atomically in a transaction (48-hour expiry) and activates the user.
 
 ### Redirects with HTMX
 
