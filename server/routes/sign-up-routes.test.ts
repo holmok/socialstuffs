@@ -4,7 +4,6 @@ import pino from 'pino'
 import LoadConfig from '@/config'
 import { createApp } from '@/server'
 
-process.env.NODE_ENV = 'development'
 const config = LoadConfig()
 const logger = pino({ level: 'silent' })
 const { app, db } = createApp(config, logger)

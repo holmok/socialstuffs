@@ -10,7 +10,7 @@ const envSchema = z.object({
     .default('3000')
     .transform((val) => Number(val)),
   HOST: z.string().default('localhost'),
-  NODE_ENV: z.enum(['development', 'production']).default('development'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOG_NAME: z.string().default(APP_NAME),
   DATABASE_URL: z.string(),
