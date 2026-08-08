@@ -4,7 +4,11 @@ import type { Hono } from 'hono'
 import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
 import { z } from 'zod'
+import * as m from '@/middleware'
 import * as utils from '@/utils'
+
+// verified against when no user matches, so sign-in takes the same time whether or not the email exists
+const DUMMY_HASH = await Bun.password.hash('dummy-password-for-timing', { algorithm: 'bcrypt', cost: 10 })
 
 const signInSchema = z.object({
   email: z.string().min(1, 'Email is required.').max(255, 'Email must be at most 255 characters long.'),
@@ -20,7 +24,14 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
     return c.render(SignInPage(), { title: 'Sign in', description: 'Sign in to socialstuffs.', styles: ['auth'] })
   })
 
-  app.post('/sign-in', async (c) => {
+  const signInLimit = m.rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    keyPrefix: 'sign-in',
+    onLimit: (c) => c.html(SignInForm({ errors: { form: ['Too many attempts. Please try again later.'] } }))
+  })
+
+  app.post('/sign-in', signInLimit, async (c) => {
     const formData = await c.req.formData()
     const form = Object.fromEntries(formData.entries()) as SignInData
     const { data, errors } = utils.validateFormData<SignInData>(form, signInSchema)
@@ -37,6 +48,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         const user = await db.selectFrom('users').where('normalizedEmail', '=', normalizedEmail).selectAll().executeTakeFirst()
 
         if (!user) {
+          await Bun.password.verify(data.password, DUMMY_HASH, 'bcrypt')
           logger.warn({ normalizedEmail }, 'User not found for sign-in')
           return c.html(SignInForm({ ...data, errors: { form: ['Invalid sign in.'] } }))
         }

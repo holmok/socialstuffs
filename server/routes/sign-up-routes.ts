@@ -7,6 +7,7 @@ import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
 import Uniquey from 'uniquey'
 import { z } from 'zod'
+import * as m from '@/middleware'
 import * as utils from '@/utils'
 
 const uniquey = new Uniquey() // short by design: public uid, not a secret
@@ -58,7 +59,14 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     return c.render(SignUpPage(), { title: 'Sign Up', description: 'Create an account for socialstuffs.', styles: ['auth'] })
   })
 
-  app.post('/sign-up', async (c) => {
+  const signUpLimit = m.rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    keyPrefix: 'sign-up',
+    onLimit: (c) => c.html(SignUpForm({ errors: { form: ['Too many attempts. Please try again later.'] } }))
+  })
+
+  app.post('/sign-up', signUpLimit, async (c) => {
     const formData = await c.req.formData()
     const form = Object.fromEntries(formData.entries()) as SignUpData
     const { data, errors } = utils.validateFormData<SignUpData>(form, signUpSchema)
@@ -138,7 +146,18 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     }
   })
 
-  app.get('/validate-account/:token/:uid', async (c) => {
+  const validateLimit = m.rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    keyPrefix: 'validate-account',
+    onLimit: (c) =>
+      c.render(AccountValidationFailurePage({ message: 'Too many attempts. Please try again later.' }), {
+        title: 'Account Validation Failure',
+        description: 'Too many account validation attempts.'
+      })
+  })
+
+  app.get('/validate-account/:token/:uid', validateLimit, async (c) => {
     const { token, uid } = c.req.param()
     const { db, logger } = c.var
 
