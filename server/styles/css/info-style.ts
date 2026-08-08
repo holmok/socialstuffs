@@ -13,11 +13,11 @@ export default {
     color: colors.accentOrange
   },
   '.eyebrow': {
-    color: colors.accentBlue,
+    color: colors.fgMuted,
     fontSize: vars.fontSizeSmall,
-    fontWeight: 'bold',
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: '2px',
+    letterSpacing: '0.08em',
     marginBottom: vars.spacingSmall
   },
   '.hero': {
@@ -26,7 +26,7 @@ export default {
     h1: {
       fontSize: vars.fontSizeHero,
       lineHeight: '1.15',
-      letterSpacing: '-1px',
+      letterSpacing: '-0.02em',
       maxWidth: '18em',
       margin: '0 auto',
       paddingBottom: vars.spacingMid
@@ -47,15 +47,19 @@ export default {
   },
   '.cta': {
     display: 'inline-block',
-    backgroundColor: colors.accentBlue,
+    backgroundColor: colors.accentOrange,
     color: colors.bgMain,
-    fontWeight: 'bold',
+    fontWeight: '600',
     padding: `${vars.spacingSmall} ${vars.spacingMain}`,
-    borderRadius: vars.borderRadiusMain,
-    textDecoration: 'none'
+    borderRadius: vars.borderRadiusSmall,
+    textDecoration: 'none',
+    transition: `background-color ${vars.transitionMain}, color ${vars.transitionMain}, border-color ${vars.transitionMain}`
   },
   '.cta:hover': {
-    backgroundColor: colors.accentOrange
+    backgroundColor: colors.fgAccent
+  },
+  '.cta:active': {
+    transform: 'translateY(1px)'
   },
   '.cta.quiet': {
     backgroundColor: 'transparent',
@@ -64,8 +68,8 @@ export default {
   },
   '.cta.quiet:hover': {
     backgroundColor: 'transparent',
-    borderColor: colors.accentBlue,
-    color: colors.accentBlue
+    borderColor: colors.fgAccent,
+    color: colors.fgAccent
   },
   '.pitch-header': {
     display: 'flex',
@@ -90,6 +94,7 @@ export default {
     gap: vars.spacingMain,
     li: {
       backgroundColor: colors.bgSurface,
+      border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
       borderRadius: vars.borderRadiusMain,
       padding: vars.spacingMain
     },
@@ -111,7 +116,7 @@ export default {
     h1: {
       fontSize: vars.fontSizeHero,
       lineHeight: '1.15',
-      letterSpacing: '-1px',
+      letterSpacing: '-0.02em',
       paddingBottom: vars.spacingMid
     },
     '.lead': {
@@ -124,18 +129,19 @@ export default {
     padding: '0',
     marginBottom: vars.spacingMain,
     li: {
-      borderLeft: `3px solid ${colors.accentBlue}`,
+      borderLeft: `3px solid ${colors.accentOrange}`,
       padding: `${vars.spacingVerySmall} ${vars.spacingMid}`,
       marginBottom: vars.spacingSmall,
       lineHeight: '1.6'
     },
     strong: {
-      color: colors.accentBlue
+      color: colors.fgAccent
     }
   },
   '.never': {
     marginTop: sectionGap,
     backgroundColor: colors.bgSurface,
+    border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
     borderRadius: vars.borderRadiusMain,
     padding: vars.spacingMain,
     h2: {
@@ -156,9 +162,6 @@ export default {
     }
   },
   [`@media (max-width: ${vars.breakpointMobile})`]: {
-    '.hero h1, .about-hero h1': {
-      fontSize: vars.fontSizeLarge
-    },
     '.pitch-list, .never ul': {
       gridTemplateColumns: '1fr'
     }

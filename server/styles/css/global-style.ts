@@ -8,6 +8,7 @@ export default {
   html: {
     backgroundColor: colors.bgMain,
     color: colors.fgMain,
+    colorScheme: 'dark',
     fontFamily: vars.fontMain,
     fontSize: vars.fontSizeMain
   },
@@ -17,24 +18,38 @@ export default {
     }
   },
   body: {
-    paddingTop: vars.headerHeight,
-    paddingBottom: vars.footerHeight
+    minHeight: '100dvh',
+    display: 'flex',
+    flexDirection: 'column',
+    paddingTop: vars.headerHeight
   },
   main: {
+    width: '100%',
     maxWidth: vars.maxWidthMain,
     margin: '0 auto',
-    padding: vars.spacingMain
+    padding: vars.spacingMain,
+    flex: '1 0 auto'
   },
   h1: {
     fontSize: vars.fontSizeLarge,
+    letterSpacing: '-0.02em',
+    lineHeight: '1.2',
     paddingBottom: vars.spacingSmall
+  },
+  'h2, h3': {
+    letterSpacing: '-0.01em'
   },
   p: {
     lineHeight: '1.6',
     marginBottom: vars.spacingMain
   },
   a: {
-    color: colors.fgAccent
+    color: colors.fgAccent,
+    textUnderlineOffset: '3px',
+    textDecorationThickness: '1px'
+  },
+  'a, button': {
+    transition: `background-color ${vars.transitionMain}, color ${vars.transitionMain}, border-color ${vars.transitionMain}, opacity ${vars.transitionMain}`
   },
   ':focus-visible': {
     outline: `${vars.outlineWidthMain} solid ${colors.accentOrange}`,
@@ -46,11 +61,15 @@ export default {
     border: 'none',
     padding: `${vars.spacingSmall} ${vars.spacingMain}`,
     fontSize: vars.fontSizeMain,
-    borderRadius: vars.borderRadiusMain,
+    fontWeight: '500',
+    borderRadius: vars.borderRadiusSmall,
     cursor: 'pointer'
   },
   'button:hover': {
     backgroundColor: colors.borderColor
+  },
+  'button:active': {
+    transform: 'translateY(1px)'
   },
   '.error-fragment': {
     backgroundColor: colors.bgError,
@@ -105,6 +124,7 @@ export default {
   },
   '.card': {
     backgroundColor: colors.bgSurface,
+    border: delimiterBorder,
     borderRadius: vars.borderRadiusMain,
     padding: vars.spacingMain
   },
@@ -118,15 +138,17 @@ export default {
     borderBottom: delimiterBorder,
     zIndex: '1'
   },
+  '@supports (backdrop-filter: blur(10px))': {
+    header: {
+      backgroundColor: colors.bgHeaderGlass,
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)'
+    }
+  },
   footer: {
-    position: 'fixed',
-    bottom: '0',
-    left: '0',
-    right: '0',
     height: vars.footerHeight,
-    backgroundColor: colors.bgMain,
     borderTop: delimiterBorder,
-    zIndex: '1'
+    flexShrink: '0'
   },
   '.header-inner, .footer-inner': {
     maxWidth: vars.maxWidthMain,
@@ -144,6 +166,7 @@ export default {
     color: colors.fgMain,
     fontWeight: 'bold',
     fontSize: vars.fontSizeLarge,
+    letterSpacing: '-0.02em',
     textDecoration: 'none'
   },
   '.site-title:hover': {
@@ -168,7 +191,7 @@ export default {
     textDecoration: 'none'
   },
   'nav a:hover': {
-    color: colors.accentBlue
+    color: colors.fgAccent
   },
   'nav ul button': {
     backgroundColor: 'transparent',
@@ -178,7 +201,7 @@ export default {
   },
   'nav ul button:hover': {
     backgroundColor: 'transparent',
-    color: colors.accentBlue
+    color: colors.fgAccent
   },
   '.nav-toggle': {
     display: 'none',

@@ -8,6 +8,7 @@ export default {
   },
   '.form': {
     backgroundColor: colors.bgSurface,
+    border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
     borderRadius: vars.borderRadiusMain,
     padding: vars.spacingMain,
     maxWidth: vars.maxWidthForm,
@@ -31,7 +32,7 @@ export default {
       backgroundColor: colors.bgSurfaceLight,
       color: colors.fgMain,
       border: 'none',
-      borderRadius: vars.borderRadiusMain,
+      borderRadius: vars.borderRadiusSmall,
       padding: vars.spacingSmall
     },
     'input::placeholder': {
@@ -77,18 +78,19 @@ export default {
     },
     button: {
       width: '100%',
-      backgroundColor: colors.accentBlue,
-      color: colors.bgMain
+      backgroundColor: colors.accentOrange,
+      color: colors.bgMain,
+      fontWeight: '600'
     },
     'button:hover': {
-      backgroundColor: colors.accentOrange
+      backgroundColor: colors.fgAccent
     },
     'button:disabled': {
       opacity: '0.6',
       cursor: 'not-allowed'
     },
     'button:disabled:hover': {
-      backgroundColor: colors.accentBlue
+      backgroundColor: colors.accentOrange
     },
     '.form-indicator': {
       display: 'none',
