@@ -13,7 +13,9 @@
 - **Phase 4 — fixed:** F10 + F30 + F31 (PR [#17](https://github.com/holmok/socialstuffs/pull/17)), F16 (PR [#18](https://github.com/holmok/socialstuffs/pull/18)), F14 (PR [#19](https://github.com/holmok/socialstuffs/pull/19)).
 - **Phase 5 — fixed:** F21 + F24 (PR [#23](https://github.com/holmok/socialstuffs/pull/23) flash, [#21](https://github.com/holmok/socialstuffs/pull/21) email), F22 + F33 + F26-part (PR [#22](https://github.com/holmok/socialstuffs/pull/22)), F23 (PR [#24](https://github.com/holmok/socialstuffs/pull/24)).
 - **Phase 6 — fixed:** F26-rest + F27 + F36-part (PR [#29](https://github.com/holmok/socialstuffs/pull/29)), F28-rest + F36-part (PR [#26](https://github.com/holmok/socialstuffs/pull/26)), F29 (PR [#28](https://github.com/holmok/socialstuffs/pull/28)), F34 (PR [#27](https://github.com/holmok/socialstuffs/pull/27), light touch).
-- **Remaining:** Phase 7 (tests). Small deferred follow-ups (all noted in [tasks.md](tasks.md)): stricter tsconfig flags (`verbatimModuleSyntax`/`noUncheckedIndexedAccess`), Kysely `log` hook, `posts.uid` convention. The dead-code sweep deliberately kept `baseImageUrl` (forward-looking) and `auth.getUser` (legitimate API).
+- **Phase 7 — complete (merged):** report-only coverage tooling (PR [#31](https://github.com/holmok/socialstuffs/pull/31)), flash/session + error-middleware tests (PR [#32](https://github.com/holmok/socialstuffs/pull/32)), sign-in/sign-up/JWT route tests (PR [#33](https://github.com/holmok/socialstuffs/pull/33)), docs (PR [#34](https://github.com/holmok/socialstuffs/pull/34)).
+- **Post-audit verification (2026-08-08):** every finding re-verified against main by six review agents; residuals and new findings tracked in [followup.md](followup.md).
+- **Remaining:** small deferred follow-ups (all noted in [tasks.md](tasks.md) and [followup.md](followup.md)): stricter tsconfig flags (`verbatimModuleSyntax`/`noUncheckedIndexedAccess`), Kysely `log` hook, `posts.uid` convention. The dead-code sweep deliberately kept `baseImageUrl` (forward-looking) and `auth.getUser` (legitimate API).
 
 See [tasks.md](tasks.md) for the live checklist.
 
@@ -82,7 +84,7 @@ After password verification, `user.status` (`pending | active | deleted | inacti
 
 **Fix:** After password verification, reject unless `status === 'active'` — distinct "please validate your email" message for `pending`, generic invalid-sign-in for `deleted`/`inactive`. Have `authorize()` also check status (see F5 for why claims alone can't be trusted).
 
-### F5. Auth JWT never expires and cannot be revoked — ✅ Fixed (PR #6): 7-day expiry + matching cookie maxAge
+### F5. Auth JWT never expires and cannot be revoked — ✅ Fixed (PR #6): 7-day expiry + matching cookie maxAge. Revocation follow-up (followup.md FU-2/FU-3): `authorize()` now re-checks the DB on gated routes and a `pwv` password-fingerprint claim revokes tokens on password change — bans/demotions/resets take effect immediately
 `server/middleware/auth-middleware.ts:40-44, 51-57`
 
 `jwt.sign(userContext, secret)` sets no `expiresIn`; the cookie has no `maxAge`. `signOut()` only clears the browser cookie — the JWT stays valid forever and nothing server-side can invalidate it. Routes build `c.var.auth.user` purely from JWT claims (line 36) and never re-check the DB (`getUser()` exists but is never called). Combined with F4: a stolen cookie is permanent access; banning or demoting a user does nothing to their existing sessions; a user demoted from `admin` keeps the `role: 'admin'` claim indefinitely.
@@ -313,16 +315,16 @@ Worth keeping and not churning:
 - **Password handling** — `Bun.password` bcrypt cost 10, async (off the event loop); strong Zod password policy; identical sign-in failure messages.
 - **Cookie integrity** — HMAC-signed cookies everywhere, `httpOnly` + `SameSite=Strict`; tampered cookies never reach `jwt.verify`.
 - **Architecture** — typed `ContextVariableMap` (the documented Hono pattern), small single-purpose middleware, per-file route groups, `utils.redirect`'s HX-Redirect/303 + the 204 `swap:false` config is exactly the documented HTMX pattern, `hx-target="this"`/`outerHTML` form re-render is the canonical inline-validation shape.
-- **Auth middleware does no DB work per request** — claims come from the cookie; `getUser()` is lazy.
+- **Auth middleware does no DB work on ungated requests** — claims come from the cookie; `getUser()` is lazy. `authorize()`-gated routes pay one indexed SELECT to re-check status/role/password-version so revocation is immediate (followup.md FU-2/FU-3).
 - **Ops** — Axiom shipping runs in a worker thread off the request path; `.env` is gitignored and absent from git history; error pages gate stack traces to dev; static serving uses Hono's traversal-safe `serveStatic`; style-combination caching works.
 - **Frontend** — correct doctype/lang/viewport/titles; deferred scripts; no duplicate runtime IDs; no nested forms; flash.js uses swap-proof document delegation; nav.js keyboard behavior (Escape, focus return, outside-click) is right; `:focus-visible` styles present; `prefers-reduced-motion` respected; main color pairs pass WCAG AA (measured).
 - **Hygiene** — `tsc --noEmit` passes; no `any` in server/ or templates/; no TODO/FIXME markers.
 
 ---
 
-## Testing strategy (no suite exists today)
+## Testing strategy (implemented — Phase 7)
 
-`bun:test` is zero-setup. In order of value:
+Originally written when no suite existed; all five targets below now have tests (see tasks.md Phase 7 for the mapping). `bun:test` is zero-setup. In order of value:
 
 1. **`/validate-account` integration test** — would have caught F1 immediately. Seed a user + token with **non-aligned ids**; assert activation, claim-by-token, reuse rejection, wrong-uid rejection, expiry.
 2. **Sign-up POST** — happy path, duplicate email/username (case variants, gmail dot/plus aliases via normalize-email), malformed payloads (missing fields — currently 500s per F15), failure-after-insert behavior (F9).

@@ -11,7 +11,7 @@ Task numbering is FU-*n*; F-numbers reference audit.md. Grouped into suggested P
 
 ### PR A — Recover-password forms parity (FU-1) ⚠️ highest priority
 
-- [ ] **FU-1 Bring the two password-recovery forms up to the standard the other forms got** (F10, F30, F31 residuals)
+- [ ] **FU-1 Bring the two password-recovery forms up to the standard the other forms got** (F10, F30, F31 residuals) — *PR [#35](https://github.com/holmok/socialstuffs/pull/35) open*
   `recover-password-form.tsx` and `set-password-form.tsx` landed in PR #19 *after* the form-hardening PR #17 and never got its treatment. Verified missing on both:
   - No native `action`/`method` fallback — if htmx fails to load, the browser default-submits **GET to the current URL**: the recover form leaks the email into the query string; the set-password form leaks the **new password** (`password` + `confirmPassword`) into the URL, browser history, and server/Axiom logs — the exact hazard F10 was about (`templates/components/recover-password-form.tsx:10`, `set-password-form.tsx:11`).
   - No `hx-disabled-elt` / `hx-indicator` / indicator span — no double-submit protection; a second click on set-password fires a second POST that fails on the already-claimed token, showing an error to a user whose reset actually succeeded.
@@ -20,9 +20,9 @@ Task numbering is FU-*n*; F-numbers reference audit.md. Grouped into suggested P
 
 ### PR B — Session revocation (FU-2, FU-3)
 
-- [ ] **FU-2 Password reset does not invalidate existing sessions/JWTs** (new finding, medium)
+- [x] **FU-2 Password reset does not invalidate existing sessions/JWTs** (new finding, medium) — *done (PR B): a `pwv` claim (SHA-256 fingerprint of `passwordHash`) is signed into the JWT at sign-in; `authorize()` compares it to the current hash, so a reset revokes all earlier tokens. No schema change needed. End-to-end test in `recover-password-flow.test.ts`*
   `recover-password-routes.ts:237-252` only updates `passwordHash`. A stolen auth cookie keeps working for up to 7 days *after* the victim resets their password — the exact scenario a reset should end. Fix: add a `passwordChangedAt` (or `tokenVersion`) check in `authenticate()` against the JWT `iat` so tokens minted before the reset are rejected; optionally also delete the user's kv session rows. (Needs a column in the externally-managed schema.)
-- [ ] **FU-3 Close the 7-day revocation window generally** (F5 accepted residual)
+- [x] **FU-3 Close the 7-day revocation window generally** (F5 accepted residual) — *done (PR B): `authorize()` re-checks the DB on gated routes (one indexed SELECT by uid) — missing row, non-active status, or `pwv` mismatch → 401 + cookie cleared; role checks use the DB role. Ungated pages still do no auth DB work. Six revocation tests in `auth-middleware.test.ts`*
   `authorize()` trusts JWT claims — banning/demoting a user has no effect until `exp`. Same mechanism as FU-2 solves both (`tokenVersion`/`passwordChangedAt` re-check, a cached DB status lookup, or short-lived JWTs with sliding refresh — `auth.getUser()` already exists and is never called). Test: flip a user's DB status to `inactive` and assert the next request 401s without waiting for expiry.
 
 ### PR C — Brute-force hardening (FU-4, FU-5)
@@ -85,7 +85,7 @@ These are small; several are "either do the one-line fix or record the acceptanc
 
 ## Docs staleness (fold into whichever PR merges first)
 
-- [ ] **FU-22** `tasks.md:13` still says "Phase 7 open for review (not yet merged)" — #31–#34 are merged. `audit.md:16` still lists "Remaining: Phase 7 (tests)"; the resolution-status block has no Phase 7 line; the `audit.md:323` heading still says "Testing strategy (**no suite exists today**)" despite 15 test files. CLAUDE.md and README were verified accurate on every other checked claim (commands, middleware order, TTLs, env vars, rate limits, styles) — only fix CLAUDE.md's "all auth forms" sentence via FU-1's code fix, not a doc edit.
+- [x] **FU-22** *(done, folded into PR B)* `tasks.md:13` still says "Phase 7 open for review (not yet merged)" — #31–#34 are merged. `audit.md:16` still lists "Remaining: Phase 7 (tests)"; the resolution-status block has no Phase 7 line; the `audit.md:323` heading still says "Testing strategy (**no suite exists today**)" despite 15 test files. CLAUDE.md and README were verified accurate on every other checked claim (commands, middleware order, TTLs, env vars, rate limits, styles) — only fix CLAUDE.md's "all auth forms" sentence via FU-1's code fix, not a doc edit.
 
 ---
 

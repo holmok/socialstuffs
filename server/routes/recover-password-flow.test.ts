@@ -316,3 +316,30 @@ describe('recovery form markup (no-JS fallback + a11y parity with the other auth
     expect(html).toContain('hx-indicator="find .form-indicator"')
   })
 })
+
+describe('password reset revokes existing sessions', () => {
+  test('an auth cookie minted before the reset is rejected afterwards', async () => {
+    const user = await seedUser('revoke')
+    const signIn = await post('/sign-in', { email: user.email, password: 'OldPass99!' })
+    expect(signIn.status).toBe(303)
+    const authCookie = signIn.headers.getSetCookie().find((s) => s.startsWith(`${config.auth.userCookieName}=`))
+    expect(authCookie).toBeDefined()
+    const cookie = (authCookie as string).split(';')[0]
+
+    // the pre-reset session reaches the protected page
+    const before = await app.request('http://localhost/user', { headers: { cookie } })
+    expect(before.status).toBe(200)
+
+    const token = await insertToken(user.id)
+    const reset = await post(`/recover-password/${token}/${user.uid}`, {
+      password: STRONG_PASSWORD,
+      confirmPassword: STRONG_PASSWORD
+    })
+    expect(reset.status).toBe(303)
+
+    // the old session is now rejected (401 -> redirect to /sign-in)
+    const after = await app.request('http://localhost/user', { headers: { cookie } })
+    expect(after.status).toBe(302)
+    expect(after.headers.get('location')).toBe('/sign-in')
+  })
+})

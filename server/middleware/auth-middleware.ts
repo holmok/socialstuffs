@@ -1,10 +1,17 @@
+import { createHash } from 'node:crypto'
 import type { UserData } from '@data/user-data'
 import type { MiddlewareHandler } from 'hono'
 import * as cookie from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
 import { sign, verify } from 'hono/jwt'
 
-export type UserContext = Pick<UserData, 'uid' | 'username' | 'status' | 'role'>
+// `pwv` (password version) is a fingerprint of the passwordHash the token was minted against;
+// authorize() compares it to the current hash so a password reset revokes all earlier tokens
+export type UserContext = Pick<UserData, 'uid' | 'username' | 'status' | 'role'> & { pwv: string }
+
+export function passwordVersion(passwordHash: string): string {
+  return createHash('sha256').update(passwordHash).digest('hex').slice(0, 16)
+}
 type User = Omit<UserData, 'passwordHash' | 'normalizedUsername' | 'normalizedEmail'>
 export type AuthContext = {
   user: UserContext | undefined
@@ -41,7 +48,8 @@ export function authenticate(): MiddlewareHandler {
           uid: payload.uid as string,
           username: payload.username as string,
           status: payload.status as UserContext['status'],
-          role: payload.role as UserContext['role']
+          role: payload.role as UserContext['role'],
+          pwv: payload.pwv as string
         }
       } catch (err) {
         logger.warn({ reason: err instanceof Error ? err.name : 'unknown' }, 'Failed to verify auth token, clearing auth cookie')
@@ -56,9 +64,9 @@ export function authenticate(): MiddlewareHandler {
     const auth: AuthContext = {
       user: userContext,
       async setUser(userContext: UserContext) {
-        const { uid, username, status, role } = userContext
+        const { uid, username, status, role, pwv } = userContext
         const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7
-        const token = await sign({ uid, username, status, role, exp }, config.auth.jwtSecret, 'HS256')
+        const token = await sign({ uid, username, status, role, pwv, exp }, config.auth.jwtSecret, 'HS256')
         await cookie.setSignedCookie(c, config.auth.userCookieName, token, config.auth.cookieSecret, {
           httpOnly: true,
           sameSite: 'strict',
@@ -92,7 +100,7 @@ type AuthorizeOptions = {
 
 export function authorize(opts: AuthorizeOptions): MiddlewareHandler {
   return async (c, next) => {
-    const { auth, logger } = c.var
+    const { auth, db, logger } = c.var
     const { user } = auth
     if ((opts.requireAuth || opts.roles) && !user) {
       logger.warn('Unauthorized access attempt to a protected route')
@@ -102,9 +110,23 @@ export function authorize(opts: AuthorizeOptions): MiddlewareHandler {
       logger.warn({ user: user.username, status: user.status }, 'Unauthorized access attempt by non-active user')
       throw new HTTPException(401, { message: 'Unauthorized' })
     }
-    if (opts.roles && user && !opts.roles.includes(user.role)) {
-      logger.warn({ user: user.username, role: user.role, roles: opts.roles }, 'Forbidden access based on role')
-      throw new HTTPException(403, { message: 'Forbidden' })
+    if (user && (opts.requireAuth || opts.roles)) {
+      // re-check the DB so bans/demotions and password resets take effect immediately
+      // instead of after the JWT's 7-day exp; claims alone are a sign-in-time snapshot
+      const dbUser = await db
+        .selectFrom('users')
+        .where('uid', '=', user.uid)
+        .select(['status', 'role', 'passwordHash'])
+        .executeTakeFirst()
+      if (dbUser?.status !== 'active' || passwordVersion(dbUser.passwordHash) !== user.pwv) {
+        logger.warn({ user: user.username }, 'Stale or revoked credentials, clearing auth cookie')
+        await auth.signOut()
+        throw new HTTPException(401, { message: 'Unauthorized' })
+      }
+      if (opts.roles && !opts.roles.includes(dbUser.role)) {
+        logger.warn({ user: user.username, role: dbUser.role, roles: opts.roles }, 'Forbidden access based on role')
+        throw new HTTPException(403, { message: 'Forbidden' })
+      }
     }
     return next()
   }

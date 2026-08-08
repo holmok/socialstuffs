@@ -75,7 +75,8 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
           uid: user.uid,
           username: user.username,
           role: user.role,
-          status: user.status
+          status: user.status,
+          pwv: m.passwordVersion(user.passwordHash)
         })
 
         logger.info({ userId: user.id }, 'User signed in successfully')
