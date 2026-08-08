@@ -46,9 +46,44 @@ export default function LoadConfig() {
     min: env.DATABASE_MIN_CLIENTS
   }
 
+  // Defense-in-depth: scrub secrets/PII from any log object regardless of where it appears.
+  // hono-pino logs req.headers (cookie/authorization) and req.url (which carries the
+  // account-validation token in its path); handlers may log user rows (passwordHash) or tokens.
+  // Wildcards match one path segment, so both `*.field` and `*.*.field` are needed to reach
+  // fields nested inside arrays/objects (e.g. existingUsers[0].passwordHash).
+  const redact: pino.redactOptions = {
+    paths: [
+      'req.headers.cookie',
+      'req.headers.authorization',
+      'password',
+      'passwordHash',
+      'token',
+      '*.password',
+      '*.passwordHash',
+      '*.token',
+      '*.url',
+      '*.*.password',
+      '*.*.passwordHash',
+      '*.*.token'
+    ],
+    // A plain string censor on `*.url` would wipe hono-pino's req.url on every request,
+    // losing all route observability. For url fields keep the route prefix and mask only the
+    // deeper (token/id) segments; everything else gets a plain censor.
+    censor: (value, path) => {
+      if (path[path.length - 1] === 'url' && typeof value === 'string') {
+        return value
+          .split('/')
+          .map((seg, i) => (i <= 1 ? seg : '[redacted]'))
+          .join('/')
+      }
+      return '[redacted]'
+    }
+  }
+
   const devPinoOptions: pino.LoggerOptions = {
     name: env.LOG_NAME,
     level: 'debug',
+    redact,
     transport: {
       target: 'pino-pretty',
       options: {
@@ -65,6 +100,7 @@ export default function LoadConfig() {
   const productionPinoOptions: pino.LoggerOptions = {
     name: env.LOG_NAME,
     level: env.LOG_LEVEL,
+    redact,
     formatters: {
       level(label) {
         return { level: label }
