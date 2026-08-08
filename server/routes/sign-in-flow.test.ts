@@ -75,6 +75,7 @@ beforeEach(() => {
 })
 
 afterAll(async () => {
+  await db.deleteFrom('kvStorage').where('key', 'like', `sign-in-acct:%${suffix}%`).execute()
   await db.deleteFrom('users').where('normalizedEmail', 'like', `%${suffix}%`).execute()
   await db.destroy()
 })
@@ -139,5 +140,51 @@ describe('POST /sign-in', () => {
     const body = await res.text()
     expect(body).toContain('Invalid sign in.')
     expect(authCookie(res)).toBeUndefined()
+  })
+})
+
+describe('per-account failed-login lockout', () => {
+  test('10 failures across distinct IPs lock the account: even the correct password is then rejected', async () => {
+    const user = await seedUser('lock', 'active')
+    for (let i = 0; i < 10; i++) {
+      // post() rotates X-Forwarded-For per request, so the per-IP limiter never trips — only the account lockout can
+      const res = await post('/sign-in', { email: user.email, password: 'Wrong99!x' })
+      expect(await res.text()).toContain('Invalid sign in.')
+    }
+
+    const blocked = await post('/sign-in', { email: user.email, password: PASSWORD })
+    expect(blocked.status).toBe(429)
+    expect(await blocked.text()).toContain('Too many attempts. Please try again later.')
+    expect(authCookie(blocked)).toBeUndefined()
+  })
+
+  test('a successful sign-in clears the failure counter', async () => {
+    const user = await seedUser('clr', 'active')
+    for (let i = 0; i < 3; i++) {
+      await post('/sign-in', { email: user.email, password: 'Wrong99!x' })
+    }
+    const ok = await post('/sign-in', { email: user.email, password: PASSWORD })
+    expect(ok.status).toBe(303)
+
+    // the counter restarted from zero: one new failure leaves count=1, not 4
+    await post('/sign-in', { email: user.email, password: 'Wrong99!x' })
+    const kv = await db
+      .selectFrom('kvStorage')
+      .select('value')
+      .where('key', '=', `sign-in-acct:${normalizeEmail(user.email)}`)
+      .executeTakeFirst()
+    expect(Number(kv?.value)).toBe(1)
+  })
+
+  test('an unknown email locks out with the identical response (no enumeration)', async () => {
+    const ghost = `ghost-${suffix}@example.com`
+    for (let i = 0; i < 10; i++) {
+      const res = await post('/sign-in', { email: ghost, password: 'Wrong99!x' })
+      expect(await res.text()).toContain('Invalid sign in.')
+    }
+
+    const blocked = await post('/sign-in', { email: ghost, password: 'Wrong99!x' })
+    expect(blocked.status).toBe(429)
+    expect(await blocked.text()).toContain('Too many attempts. Please try again later.')
   })
 })

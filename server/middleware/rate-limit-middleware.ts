@@ -1,5 +1,7 @@
+import type { Database } from '@data/index'
 import type { Context, MiddlewareHandler } from 'hono'
 import { getConnInfo } from 'hono/bun'
+import { type Kysely, sql } from 'kysely'
 
 type RateLimitOptions = {
   windowMs: number
@@ -18,6 +20,14 @@ const windows = new Map<string, RateWindow>()
 // test-only: clears all rate-limit state (the map is module-level, shared across createApp() instances in one process)
 export function __resetRateLimits() {
   windows.clear()
+}
+
+// test-only: fills the map with unexpired filler keys to exercise the MAX_TRACKED_KEYS overflow path
+export function __fillRateLimitKeys(count: number, ttlMs: number) {
+  const expires = Date.now() + ttlMs
+  for (let i = 0; i < count; i++) {
+    windows.set(`__filler:${i}`, { count: 1, expires })
+  }
 }
 
 function clientIp(c: Context): string {
@@ -39,10 +49,12 @@ export function rateLimit({ windowMs, max, keyPrefix, onLimit }: RateLimitOption
     for (const [key, window] of windows) {
       if (window.expires <= now) windows.delete(key)
     }
-    if (windows.size > MAX_TRACKED_KEYS) windows.clear()
     const key = `${keyPrefix}:${clientIp(c)}`
     const window = windows.get(key)
     if (!window) {
+      // at capacity even after the sweep (a key-flood): let new keys pass untracked rather than
+      // wiping the map — clearing would reset every window, including ones actively blocking an attacker
+      if (windows.size >= MAX_TRACKED_KEYS) return next()
       windows.set(key, { count: 1, expires: now + windowMs })
     } else if (window.count >= max) {
       c.var.logger.warn({ key }, 'Rate limit exceeded')
@@ -52,5 +64,53 @@ export function rateLimit({ windowMs, max, keyPrefix, onLimit }: RateLimitOption
       window.count += 1
     }
     await next()
+  }
+}
+
+type FailureLimitOptions = {
+  windowMs: number
+  max: number
+  keyPrefix: string
+}
+
+// Per-identifier failed-attempt limiter backed by kvStorage, so it survives restarts and
+// (unlike the per-IP limiter above) tracks a target across distributed source IPs.
+// The caller decides what counts as a failure: check isBlocked() up front, recordFailure()
+// on failed attempts, clear() on success. Expired rows are reaped by the hourly kv sweep.
+export function failureLimit({ windowMs, max, keyPrefix }: FailureLimitOptions) {
+  const keyFor = (id: string) => `${keyPrefix}:${id}`
+  return {
+    async isBlocked(db: Kysely<Database>, id: string): Promise<boolean> {
+      const row = await db
+        .selectFrom('kvStorage')
+        .select('value')
+        .where('key', '=', keyFor(id))
+        .where('expires', '>', new Date())
+        .executeTakeFirst()
+      return row !== undefined && Number(row.value) >= max
+    },
+    async recordFailure(db: Kysely<Database>, id: string): Promise<void> {
+      // atomic in-place increment while the window is open; otherwise start a fresh window.
+      // Two concurrent first-failures can collapse into one count — a bounded undercount
+      // at the window boundary only, harmless for a lockout threshold.
+      const bumped = await db
+        .updateTable('kvStorage')
+        .set({ value: sql`(value::int + 1)::text` })
+        .where('key', '=', keyFor(id))
+        .where('expires', '>', new Date())
+        .returning('value')
+        .executeTakeFirst()
+      if (!bumped) {
+        const fresh = { key: keyFor(id), value: '1', expires: new Date(Date.now() + windowMs) }
+        await db
+          .insertInto('kvStorage')
+          .values(fresh)
+          .onConflict((oc) => oc.column('key').doUpdateSet({ value: fresh.value, expires: fresh.expires }))
+          .execute()
+      }
+    },
+    async clear(db: Kysely<Database>, id: string): Promise<void> {
+      await db.deleteFrom('kvStorage').where('key', '=', keyFor(id)).execute()
+    }
   }
 }
