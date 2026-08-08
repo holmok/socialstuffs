@@ -2,7 +2,6 @@ import { CamelCasePlugin, Kysely, PostgresDialect, WithSchemaPlugin } from 'kyse
 import { Pool, type PoolConfig } from 'pg'
 import type { Logger } from 'pino'
 import type { AccountValidationTable } from './account-validation-token-data'
-import type { CachedQueriesTable } from './cached-queries'
 import type { CommentTable } from './comment-data'
 import type { FavoriteTable } from './favorite-data'
 import type { KvStoreTable } from './kv-storage-data'
@@ -13,7 +12,6 @@ import type { RelationsTable } from './relation-data'
 import type { UserTable } from './user-data'
 
 export * from './account-validation-token-data'
-export * from './cached-queries'
 export * from './comment-data'
 export * from './favorite-data'
 export * from './kv-storage-data'
@@ -44,5 +42,4 @@ export type Database = {
   favorites: FavoriteTable
   postTargets: PostTargetsTable
   comments: CommentTable
-  cachedQueries: CachedQueriesTable
 }

@@ -8,7 +8,7 @@ export type RelationsTable = {
   userUid: ColumnType<string, string, never>
   friendId: ColumnType<number, number, never>
   friendUid: ColumnType<string, string, never>
-  type: ColumnType<RelationType, RelationType, RelationType>
+  type: RelationType
   created: ColumnType<Date, never, never>
   updated: ColumnType<Date, never, never>
 }
