@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
 import { compress } from 'hono/compress'
 import { csrf } from 'hono/csrf'
+import { etag } from 'hono/etag'
 import { secureHeaders } from 'hono/secure-headers'
 import type { Logger } from 'pino'
 import type { Config } from '@/config'
@@ -49,7 +50,7 @@ export function createApp(config: Config, logger: Logger) {
       xFrameOptions: 'DENY'
     })
   )
-  app.use('/js/*', m.staticCache(config), serveStatic({ root: './static' }))
+  app.use('/js/*', m.staticCache(config), etag(), serveStatic({ root: './static' }))
   app.on(
     'GET',
     [
@@ -63,6 +64,7 @@ export function createApp(config: Config, logger: Logger) {
       '/site.webmanifest'
     ],
     m.staticCache(config),
+    etag(),
     serveStatic({ root: './static' })
   )
   app.use(csrf())
