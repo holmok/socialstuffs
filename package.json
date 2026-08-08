@@ -12,7 +12,6 @@
     "csstype": "^3.2.3",
     "hono": "^4.12.33",
     "hono-pino": "^0.10.3",
-    "jsonwebtoken": "^9.0.3",
     "kysely": "^0.29.4",
     "normalize-email": "^1.1.1",
     "pg": "^8.22.0",
@@ -24,7 +23,6 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.6",
     "@types/bun": "latest",
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/pg": "^8.21.0",
     "concurrently": "^10.0.4",
     "pino-pretty": "^13.1.3",
