@@ -1,4 +1,4 @@
-import ErrorFragment from '@components/error-fragment'
+import ErrorOobFragment from '@components/error-oob-fragment'
 import ErrorPage from '@pages/error'
 import type { Context, ErrorHandler, NotFoundHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
@@ -10,7 +10,10 @@ function isHtmxRequest(c: Context) {
 
 function renderError(c: Context, status: ContentfulStatusCode, message?: string, detail?: string) {
   if (isHtmxRequest(c)) {
-    return c.html(ErrorFragment({ status, message }), status)
+    // Suppress the target swap so the triggering form (and what the user typed) survives,
+    // and surface the error out-of-band as a flash message instead of a form-replacing body.
+    c.header('HX-Reswap', 'none')
+    return c.html(ErrorOobFragment({ status, message }), status)
   }
   c.status(status)
   return c.render(ErrorPage({ status, message, detail }), {
