@@ -9,7 +9,7 @@ export type SessionContext = {
   removeSessionValue: (key: string) => Promise<void>
 }
 
-const uniquey = new Uniquey()
+const uniquey = new Uniquey({ length: 32 })
 
 export function session(): MiddlewareHandler {
   return async (c, next) => {
