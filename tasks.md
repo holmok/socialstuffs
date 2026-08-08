@@ -6,7 +6,8 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 - **Phase 1 complete** (merged): PR [#1](https://github.com/holmok/socialstuffs/pull/1) deps, [#2](https://github.com/holmok/socialstuffs/pull/2) auth hardening, [#3](https://github.com/holmok/socialstuffs/pull/3) validate-account, [#4](https://github.com/holmok/socialstuffs/pull/4) lint baseline. PR #4 also completed 2.2; PR #3 completed 7.1 and the validate-account part of 3.5.
 - **Phase 1 follow-ups complete** (merged): PR [#5](https://github.com/holmok/socialstuffs/pull/5) — 1.6, 1.7, 1.8.
 - **Phase 2 complete** (merged): PR [#6](https://github.com/holmok/socialstuffs/pull/6) JWT expiry + secure cookies (2.1), [#7](https://github.com/holmok/socialstuffs/pull/7) token entropy (2.5), [#8](https://github.com/holmok/socialstuffs/pull/8) sign-out POST + authorize (2.7, 2.8), [#9](https://github.com/holmok/socialstuffs/pull/9) middleware pipeline + secure headers + CSRF (2.3, 2.4), [#10](https://github.com/holmok/socialstuffs/pull/10) rate limiting + timing-oracle fix (2.6); docs [#11](https://github.com/holmok/socialstuffs/pull/11).
-- **Phase 3 open for review** (not yet merged): PR [#12](https://github.com/holmok/socialstuffs/pull/12) fix rate-limit test broken by the #9+#10 merge (csrf vs origin-less POST), [#13](https://github.com/holmok/socialstuffs/pull/13) password echo (3.4), [#14](https://github.com/holmok/socialstuffs/pull/14) log redaction (3.5), [#15](https://github.com/holmok/socialstuffs/pull/15) sign-up integrity (3.1, 3.2, 3.3). This docs PR should merge alongside/after them.
+- **Phase 3 complete** (merged): PR [#12](https://github.com/holmok/socialstuffs/pull/12) rate-limit test fix, [#13](https://github.com/holmok/socialstuffs/pull/13) password echo (3.4), [#14](https://github.com/holmok/socialstuffs/pull/14) log redaction (3.5), [#15](https://github.com/holmok/socialstuffs/pull/15) sign-up integrity (3.1, 3.2, 3.3); docs [#16](https://github.com/holmok/socialstuffs/pull/16).
+- **Phase 4 open for review** (not yet merged): PR [#17](https://github.com/holmok/socialstuffs/pull/17) form PE + feedback + a11y (4.1, 4.2, 4.4), [#18](https://github.com/holmok/socialstuffs/pull/18) preserve forms on error (4.3), [#19](https://github.com/holmok/socialstuffs/pull/19) password recovery (4.5). This docs PR should merge alongside/after them.
 
 ---
 
@@ -61,20 +62,17 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 
 ## Phase 4 — Frontend resilience & accessibility
 
-- [ ] **4.1 Form fallbacks + autocomplete** (F10, F31-part)
-  Add `action`/`method` to both forms (kills the JS-off password-in-URL leak). Add an `autocomplete` prop to `TextInput`; set `email`/`current-password` on sign-in, `username`/`email`/`new-password` on sign-up.
+- [x] **4.1 Form fallbacks + autocomplete** (F10, F31-part) — *PR #17: native `action`/`method` alongside `hx-post` on all three forms (no-JS submit no longer leaks the password to a URL); `autocomplete` prop on `TextInput` set per field (current-password / new-password / email / username)*
 
-- [ ] **4.2 Request feedback: indicators, double-submit, network errors** (F30)
-  `hx-disabled-elt="find button"` + `hx-indicator` on both forms with a `.htmx-request` style in `form-style.ts`; a global `htmx:sendError` listener in `flash.js` that surfaces a flash-style "couldn't reach the server" message.
+- [x] **4.2 Request feedback: indicators, double-submit, network errors** (F30) — *PR #17: `hx-disabled-elt="find button"` + `hx-indicator` with a `.form-indicator` "Working…" span and disabled-button style; `flash.js` listens for `htmx:sendError`/`htmx:timeout` and surfaces a dismissible flash-style error*
 
-- [ ] **4.3 Preserve forms on server errors** (F16)
-  In `error-middleware.ts`, send `HX-Reswap: none` for HTMX error responses and deliver the error via the flash region instead of swapping `ErrorFragment` over the form.
+- [x] **4.3 Preserve forms on server errors** (F16) — *PR #18: HTMX error responses send `HX-Reswap: none` + an out-of-band flash fragment (targets `main`, since `.flash` may not exist), so the form and its input survive; non-HTMX full-page errors and the 401 redirect unchanged*
 
-- [ ] **4.4 A11y pass on forms and nav** (F31)
-  Error `<ul>` gets `id={id}-errors`; inputs get `aria-invalid` + `aria-describedby` when errored; form-errors container gets `role="alert"`; nav toggle gets `aria-label="Menu"`; lighten the two failing placeholder colors (target ≥4.5:1).
+- [x] **4.4 A11y pass on forms and nav** (F31) — *PR #17: `aria-invalid` + `aria-describedby` tying inputs to their errors `<ul>` id; `role="alert"` on form-errors; nav toggle `aria-label="Menu"` with the glyph `aria-hidden`; placeholder contrast raised to AA (2.03:1 → 4.75:1, 2.12:1 → 4.90:1)*
 
-- [ ] **4.5 Resolve `/recover-password`** (F14)
-  Quick: remove the link. Real: implement the flow using the *fixed* token primitives (32-char token, expiry, atomic claim, neutral responses, rate-limited) — after Phases 2–3, this is mostly assembly.
+- [x] **4.5 Resolve `/recover-password`** (F14) — *PR #19: full password-recovery flow (request + reset), 32-char tokens, 48h expiry enforced at both GET and POST, atomic single-use claim with uid binding, rate-limited, neutral responses; the dead sign-in link now resolves. Two review passes — the first caught expiry-at-POST and uid-binding defects*
+
+**Phase 4 follow-up (trivial):** the password-reset form's fields could take `autocomplete="new-password"` now that #17 added the prop to `TextInput` — deferred to avoid cross-PR conflict.
 
 ## Phase 5 — Performance
 
