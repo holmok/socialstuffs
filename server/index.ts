@@ -15,22 +15,31 @@ if (config.mode.isProd) {
       edge: 'us-east-1.aws.edge.axiom.co'
     }
   })
-  streams = [{ stream: process.stdout }, { stream: axiomStream }]
+  streams = [{ stream: pino.destination({ dest: 1, sync: false }) }, { stream: axiomStream }]
 }
 
 const logger = pino(config.pino, pino.multistream(streams))
 
-await utils.assertPortFree(config.server.host, config.server.port, logger)
-
 const { app, db } = createApp(config, logger)
 
-const server = Bun.serve({
-  port: config.server.port,
-  fetch: app.fetch,
-  hostname: config.server.host
-})
+let server: ReturnType<typeof Bun.serve>
+try {
+  server = Bun.serve({
+    port: config.server.port,
+    fetch: app.fetch,
+    hostname: config.server.host
+  })
+} catch (err) {
+  utils.logError(logger, err, `Failed to start server on ${config.server.host}:${config.server.port}`)
+  process.exit(1)
+}
 
 logger.info({ port: server.port, host: server.hostname }, 'Server started')
 
-process.on('SIGINT', () => utils.shutdown('SIGINT', server, db, logger))
-process.on('SIGTERM', () => utils.shutdown('SIGTERM', server, db, logger))
+// Expired kvStorage rows are only removed when their exact key is read again; sweep hourly so
+// abandoned sessions' rows don't accumulate forever. unref() keeps it from blocking process exit.
+const sweepInterval = setInterval(() => utils.sweepExpiredKv(db, logger), 60 * 60 * 1000)
+sweepInterval.unref()
+
+process.on('SIGINT', () => utils.shutdown('SIGINT', server, db, logger, sweepInterval))
+process.on('SIGTERM', () => utils.shutdown('SIGTERM', server, db, logger, sweepInterval))
