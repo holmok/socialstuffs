@@ -11,7 +11,8 @@
 - **P2/P3 — fixed:** F18 + F19 (PR [#8](https://github.com/holmok/socialstuffs/pull/8)); F9 + F15 (+ F24 client/template caching still open) via [#15](https://github.com/holmok/socialstuffs/pull/15); F17 ([#13](https://github.com/holmok/socialstuffs/pull/13)); F25 ([#3](https://github.com/holmok/socialstuffs/pull/3) + [#14](https://github.com/holmok/socialstuffs/pull/14)); F28 partial (`claimed` fixed on both token tables via #3 + #5; `lastLogin`/`imageUrl` remain).
 - Phase 1 follow-ups (PR [#5](https://github.com/holmok/socialstuffs/pull/5)): local `typescript` dep, password-recovery `claimed` type, `NODE_ENV=test` support.
 - **Phase 4 — fixed:** F10 + F30 + F31 (PR [#17](https://github.com/holmok/socialstuffs/pull/17)), F16 (PR [#18](https://github.com/holmok/socialstuffs/pull/18)), F14 (PR [#19](https://github.com/holmok/socialstuffs/pull/19)).
-- **Remaining:** Phase 5 (performance: F21–F24-rest, F26, F33), Phase 6 (idioms/types: F27, F28-rest, F29, F34, F36), Phase 7 (tests). See [tasks.md](tasks.md).
+- **Phase 5 — fixed:** F21 + F24 (PR [#23](https://github.com/holmok/socialstuffs/pull/23) flash, [#21](https://github.com/holmok/socialstuffs/pull/21) email), F22 + F33 + F26-part (PR [#22](https://github.com/holmok/socialstuffs/pull/22)), F23 (PR [#24](https://github.com/holmok/socialstuffs/pull/24)).
+- **Remaining:** Phase 6 (idioms/types: F26-rest [dev pino transport + logger typing], F27, F28-rest, F29, F34, F36), Phase 7 (tests). See [tasks.md](tasks.md).
 
 See [tasks.md](tasks.md) for the live checklist.
 
@@ -206,28 +207,28 @@ Sign-up returns "Email is already in use" with no rate limit in front of it — 
 
 ### Performance
 
-### F21. Every full-page render costs 2 DB round trips for flash messages — even static pages
+### F21. Every full-page render costs 2 DB round trips for flash messages — even static pages — ✅ Fixed (PR #23): single-query pop + zero-DB fast path for new sessions
 `server/middleware/layout-middleware.tsx:17`, `server/middleware/flash-middleware.ts:21-26`, `server/middleware/session-middleware.ts:28-59`
 
 The layout renderer calls `getFlashes()` on every full-page render: a SELECT on `kvStorage` plus an **unconditional DELETE** (even when the SELECT returned nothing). The marketing pages (`/`, `/about`, `/terms`…), which need zero DB access, do 2 queries per hit — the app's dominant query source.
 
 **Fix:** Collapse to one atomic pop: `deleteFrom('kvStorage').where('key','=',k).where('expires','>',new Date()).returning('value')`. Better: skip the DB entirely when the request arrived without a session cookie (a brand-new session cannot have flashes) — combined with F12 this makes anonymous static-page hits DB-free.
 
-### F22. `kvStorage` grows without bound
+### F22. `kvStorage` grows without bound — ✅ Fixed (PR #22): hourly expiry sweep
 `server/middleware/session-middleware.ts:30-36,43`
 
 Expired rows are deleted only if that exact key is read again. Every abandoned session (crawlers, bounced visitors) leaves rows forever — and this is the table the hottest query path (F21) hits.
 
 **Fix:** Periodic sweep — `DELETE FROM kv_storage WHERE expires < now()` on a `setInterval` at startup (fine at this scale). Confirm `key` has a unique index (the upsert requires it).
 
-### F23. Static assets: gzip-on-the-fly per request, no ETag, unversioned 30-day cache
+### F23. Static assets: gzip-on-the-fly per request, no ETag, unversioned 30-day cache — ✅ Fixed (PR #24): versioned+immutable htmx, ETag revalidation, moderate TTL for unversioned
 `server/server.ts:41,45-46`, `server/middleware/static-cache-middleware.ts:4-14`
 
 `compress()` wraps `serveStatic`, so the 51 KB `htmx.min.js` runs through `CompressionStream` on every request. Hono's `serveStatic` sets no ETag/Last-Modified, so no 304s ever happen (the 304 branch in static-cache-middleware is dead code). Cache-Control is `public, max-age=2592000` — 30 days, no `immutable`, unversioned filenames, so a patched htmx won't reach returning users for up to a month. (CLAUDE.md says 1 hour; the code says 30 days — see F35.)
 
 **Fix:** Commit `.gz`/`.br` siblings and use `serveStatic({ root: './static', precompressed: true })` (supported by this Hono version); add `hono/etag` ahead of it; either version the filenames + `immutable`, or drop the TTL to something honest.
 
-### F24. Email sending: client and template re-created per send; response blocks on Postmark — ⚠️ Partially fixed (PR #15): send moved after commit + non-fatal, so it no longer blocks the response into a 500; client/template still re-created per send (Phase 5, task 5.4)
+### F24. Email sending: client and template re-created per send; response blocks on Postmark — ✅ Fixed (PR #15 moved the send after commit + non-fatal; PR #21 constructs the client once and caches templates)
 `server/api/email-api.ts:42,47`, `server/routes/sign-up-routes.ts:119`
 
 `sendEmail` constructs a new `Postmark.ServerClient` and re-reads the template file from disk on every call. Sign-up latency = bcrypt + 2 inserts + a cross-internet Postmark round trip; a Postmark outage turns sign-ups into 500s after the user row committed (F9).
@@ -241,7 +242,7 @@ The `/validate-account` failure paths log the raw token at `warn` — the line-1
 
 **Fix:** Log token hashes/last-4 only; drop the email `data` payload from the debug log; add `redact: { paths: ['req.headers.cookie', '*.password', '*.token', '*.url'], censor: '[redacted]' }` (tune paths).
 
-### F26. pino wiring: dev multistream is dead code; prod multistream can drop debug; `c.var.logger` type is wrong
+### F26. pino wiring: dev multistream is dead code; prod multistream can drop debug; `c.var.logger` type is wrong — ⚠️ Partially fixed (PR #22): prod stdout is now an async destination; the dev-transport-shadows-multistream issue and the `c.var.logger` typing remain (Phase 6, task 6.1)
 `server/index.ts:8-21`, `server/server.ts:19`, `server/middleware/logger-middleware.ts:5-9`
 
 Three distinct issues: (a) in dev, `config.pino` contains `transport: pino-pretty`, and pino silently discards the passed multistream when a transport is set — the dev multistream is dead code. (b) In prod, `pino.multistream` entries default to level `info`, so `LOG_LEVEL=debug` emits nothing at debug; the bare `process.stdout` stream is also synchronous. (c) `ContextVariableMap` declares `logger: pino.Logger` but hono-pino stores its own `PinoLogger` wrapper — no `.child()`, `.level`, etc.; the type system will accept calls that crash at runtime. Also: several handlers use the module-scope startup logger instead of `c.var.logger`, losing request context, and hono-pino logs every static-asset request (noise + Axiom cost — largely solved by F12).

@@ -69,7 +69,7 @@ templates/
   pages/          # pages wrapped in a layout
   components/     # fragments used as HTMX swap responses
   email/          # HTML email templates
-static/           # favicons, htmx.min.js, nav.js, flash.js
+static/           # favicons, htmx.min.2.0.10.js (versioned), nav.js, flash.js
 ```
 
 See [CLAUDE.md](CLAUDE.md) for a deeper architecture walkthrough.

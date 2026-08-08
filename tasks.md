@@ -7,7 +7,8 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 - **Phase 1 follow-ups complete** (merged): PR [#5](https://github.com/holmok/socialstuffs/pull/5) — 1.6, 1.7, 1.8.
 - **Phase 2 complete** (merged): PR [#6](https://github.com/holmok/socialstuffs/pull/6) JWT expiry + secure cookies (2.1), [#7](https://github.com/holmok/socialstuffs/pull/7) token entropy (2.5), [#8](https://github.com/holmok/socialstuffs/pull/8) sign-out POST + authorize (2.7, 2.8), [#9](https://github.com/holmok/socialstuffs/pull/9) middleware pipeline + secure headers + CSRF (2.3, 2.4), [#10](https://github.com/holmok/socialstuffs/pull/10) rate limiting + timing-oracle fix (2.6); docs [#11](https://github.com/holmok/socialstuffs/pull/11).
 - **Phase 3 complete** (merged): PR [#12](https://github.com/holmok/socialstuffs/pull/12) rate-limit test fix, [#13](https://github.com/holmok/socialstuffs/pull/13) password echo (3.4), [#14](https://github.com/holmok/socialstuffs/pull/14) log redaction (3.5), [#15](https://github.com/holmok/socialstuffs/pull/15) sign-up integrity (3.1, 3.2, 3.3); docs [#16](https://github.com/holmok/socialstuffs/pull/16).
-- **Phase 4 open for review** (not yet merged): PR [#17](https://github.com/holmok/socialstuffs/pull/17) form PE + feedback + a11y (4.1, 4.2, 4.4), [#18](https://github.com/holmok/socialstuffs/pull/18) preserve forms on error (4.3), [#19](https://github.com/holmok/socialstuffs/pull/19) password recovery (4.5). This docs PR should merge alongside/after them.
+- **Phase 4 complete** (merged): PR [#17](https://github.com/holmok/socialstuffs/pull/17) form PE + feedback + a11y (4.1, 4.2, 4.4), [#18](https://github.com/holmok/socialstuffs/pull/18) preserve forms on error (4.3), [#19](https://github.com/holmok/socialstuffs/pull/19) password recovery (4.5); docs [#20](https://github.com/holmok/socialstuffs/pull/20).
+- **Phase 5 open for review** (not yet merged): PR [#21](https://github.com/holmok/socialstuffs/pull/21) email client/template reuse (5.4), [#22](https://github.com/holmok/socialstuffs/pull/22) kvStorage sweep + pool/shutdown/logging hardening (5.2, 5.5), [#23](https://github.com/holmok/socialstuffs/pull/23) cheap flash reads (5.1), [#24](https://github.com/holmok/socialstuffs/pull/24) versioned/immutable static caching + ETag (5.3). This docs PR should merge alongside/after them.
 
 ---
 
@@ -76,20 +77,15 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 
 ## Phase 5 — Performance
 
-- [ ] **5.1 Cheap flash reads** (F21)
-  Make `getFlashes` one atomic delete-returning "pop"; skip the DB entirely when the request has no session cookie. With 2.3 done, anonymous static-page hits become DB-free.
+- [x] **5.1 Cheap flash reads** (F21) — *PR #23: `getFlashes` uses a single delete-returning `popSessionValue`, and short-circuits with zero DB work when the session was freshly minted (`isNew`). Anonymous first hits do no flash DB work*
 
-- [ ] **5.2 kvStorage sweep** (F22)
-  `setInterval` at startup: `DELETE FROM kv_storage WHERE expires < now()` (hourly is plenty). Confirm the unique index on `key`.
+- [x] **5.2 kvStorage sweep** (F22) — *PR #22: hourly `setInterval(...).unref()` runs `sweepExpiredKv` (`DELETE … WHERE expires < now`), cleared on shutdown. The `key` unique index is external schema (upsert relies on it) — noted, unchanged*
 
-- [ ] **5.3 Static asset caching done right** (F23)
-  Commit `.gz`/`.br` siblings, `serveStatic({ precompressed: true })`, add `hono/etag`; version `htmx.min.js` in its filename (and bump to latest 2.0.x) + `immutable`, or lower the TTL.
+- [x] **5.3 Static asset caching done right** (F23) — *PR #24: chose versioned + immutable + ETag (no precompressed siblings). `htmx.min.js` → `htmx.min.2.0.10.js` with `max-age=31536000, immutable`; unversioned assets get 1-day + ETag revalidation; `compress()` still gzips on the wire*
 
-- [ ] **5.4 Email API cleanup** (F24)
-  Construct the Postmark client once in the constructor; cache template file contents on first read.
+- [x] **5.4 Email API cleanup** (F24) — *PR #21: Postmark client constructed once in the constructor; template contents lazily memoized (raw template cached, substitution still per-send). Closes the remaining part of F24*
 
-- [ ] **5.5 Pool + shutdown + logging hardening** (F33, F26-part)
-  `connectionTimeoutMillis: 5000` (+ explicit `idleTimeoutMillis`); shutdown deadline racing `server.stop(true)` at ~10 s; drop `assertPortFree` (try/catch `Bun.serve` instead); async stdout destination for pino.
+- [x] **5.5 Pool + shutdown + logging hardening** (F33, F26-part) — *PR #22: `connectionTimeoutMillis: 5000` + `idleTimeoutMillis: 30000`; shutdown races `server.stop(true)` at 10s then always `db.destroy()`; `assertPortFree` dropped for a try/catch on `Bun.serve`; prod stdout → `pino.destination({ sync: false })`. The dev-transport restructuring stays F26 (Phase 6.1)*
 
 ## Phase 6 — Idioms, types, and hygiene
 
