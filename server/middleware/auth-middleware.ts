@@ -86,7 +86,7 @@ export function authorize(opts: AuthorizeOptions): MiddlewareHandler {
   return async (c, next) => {
     const { auth, logger } = c.var
     const { user } = auth
-    if (opts.requireAuth && !user) {
+    if ((opts.requireAuth || opts.roles) && !user) {
       logger.warn('Unauthorized access attempt to a protected route')
       throw new HTTPException(401, { message: 'Unauthorized' })
     }
