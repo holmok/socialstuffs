@@ -18,7 +18,7 @@ export default {
     h1: {
       fontSize: vars.fontSizeHero,
       lineHeight: '1.15',
-      letterSpacing: '-1px',
+      letterSpacing: '-0.02em',
       padding: `${vars.spacingMid} 0`
     },
     '.error-copy': {
@@ -37,6 +37,7 @@ export default {
     '.error-detail': {
       textAlign: 'left',
       backgroundColor: colors.bgSurface,
+      border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
       color: colors.fgMuted,
       fontSize: vars.fontSizeSmall,
       padding: vars.spacingMain,
@@ -48,9 +49,6 @@ export default {
   [`@media (max-width: ${vars.breakpointMobile})`]: {
     '.error-page .status-code': {
       fontSize: '80px'
-    },
-    '.error-page h1': {
-      fontSize: vars.fontSizeLarge
     }
   }
 } as CSSObject
