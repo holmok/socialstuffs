@@ -1,4 +1,3 @@
-import * as dateFns from 'date-fns'
 import type { MiddlewareHandler } from 'hono'
 import * as cookie from 'hono/cookie'
 import Uniquey from 'uniquey'
@@ -40,7 +39,7 @@ export function session(): MiddlewareHandler {
         const data = {
           key: kvKey,
           value: JSON.stringify(value),
-          expires: dateFns.addDays(new Date(), 1)
+          expires: new Date(Date.now() + 24 * 60 * 60 * 1000)
         }
         await db
           .insertInto('kvStorage')
