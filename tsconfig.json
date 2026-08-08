@@ -1,5 +1,10 @@
 {
   "compilerOptions": {
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "noEmit": true,
     "paths": {
       "@/*": ["./server/*"],
       "@routes/*": ["./server/routes/*"],
