@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { type AuthContext, authorize, type UserContext } from '@middleware/auth-middleware'
 import { Hono } from 'hono'
+import type { PinoLogger } from 'hono-pino'
 import pino from 'pino'
 
 const logger = pino({ level: 'silent' })
@@ -8,7 +9,7 @@ const logger = pino({ level: 'silent' })
 function appWithUser(user: UserContext | undefined) {
   const app = new Hono()
   app.use('*', async (c, next) => {
-    c.set('logger', logger)
+    c.set('logger', logger as unknown as PinoLogger)
     const auth: AuthContext = {
       user,
       getUser: async () => undefined,

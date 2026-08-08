@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import pino from 'pino'
-import LoadConfig from '@/config'
+import LoadConfig, { envSchema } from '@/config'
 
 // Builds a real pino logger from the config's pino options against a capture stream,
 // so we exercise the actual `redact` config LoadConfig() ships (F25 / tasks.md 3.5).
@@ -61,5 +61,38 @@ describe('config poolConfig', () => {
     const { poolConfig } = LoadConfig()
     expect(poolConfig.connectionTimeoutMillis).toBe(5000)
     expect(poolConfig.idleTimeoutMillis).toBe(30000)
+  })
+})
+
+describe('config coerced numerics (F27 / tasks.md 6.2)', () => {
+  test('numeric env vars are coerced to numbers', () => {
+    const config = LoadConfig()
+    expect(typeof config.server.port).toBe('number')
+    expect(typeof config.poolConfig.max).toBe('number')
+    expect(typeof config.poolConfig.min).toBe('number')
+  })
+
+  test('exposes the resolved log level', () => {
+    expect(['debug', 'info', 'warn', 'error']).toContain(LoadConfig().logLevel)
+  })
+
+  test('rejects non-numeric, zero, and negative numerics (safeParse path)', () => {
+    // process.env supplies all other required vars; we override only the field under test
+    expect(envSchema.safeParse({ ...process.env, PORT: 'abc' }).success).toBe(false)
+    expect(envSchema.safeParse({ ...process.env, PORT: '0' }).success).toBe(false)
+    expect(envSchema.safeParse({ ...process.env, PORT: '-1' }).success).toBe(false)
+    expect(envSchema.safeParse({ ...process.env, DATABASE_MAX_CLIENTS: 'lots' }).success).toBe(false)
+  })
+
+  test('accepts a valid numeric override', () => {
+    const parsed = envSchema.safeParse({ ...process.env, PORT: '8080' })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.PORT).toBe(8080)
+  })
+
+  test('accepts DATABASE_MIN_CLIENTS=0 (a pool min of 0 is valid)', () => {
+    const parsed = envSchema.safeParse({ ...process.env, DATABASE_MIN_CLIENTS: '0' })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.DATABASE_MIN_CLIENTS).toBe(0)
   })
 })

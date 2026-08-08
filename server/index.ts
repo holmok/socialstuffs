@@ -5,7 +5,11 @@ import * as utils from './utils'
 
 const config = LoadConfig()
 
-let streams: pino.StreamEntry[] = [{ stream: process.stdout }]
+// In dev, config.pino sets a pino-pretty `transport`; pino ignores any passed stream when a
+// transport is configured, so dev must construct with the options alone (no multistream).
+// In prod there is no transport, so we fan out to an async stdout destination plus the Axiom
+// transport stream — each entry needs an explicit level or it defaults to 'info' and drops debug.
+let logger: pino.Logger
 if (config.mode.isProd) {
   const axiomStream = pino.transport({
     target: '@axiomhq/pino',
@@ -15,10 +19,14 @@ if (config.mode.isProd) {
       edge: 'us-east-1.aws.edge.axiom.co'
     }
   })
-  streams = [{ stream: pino.destination({ dest: 1, sync: false }) }, { stream: axiomStream }]
+  const streams: pino.StreamEntry[] = [
+    { level: config.logLevel, stream: pino.destination({ dest: 1, sync: false }) },
+    { level: config.logLevel, stream: axiomStream }
+  ]
+  logger = pino(config.pino, pino.multistream(streams))
+} else {
+  logger = pino(config.pino)
 }
-
-const logger = pino(config.pino, pino.multistream(streams))
 
 const { app, db } = createApp(config, logger)
 

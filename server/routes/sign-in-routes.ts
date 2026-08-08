@@ -37,7 +37,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
     const result = utils.validateFormData<SignInData>(form, signInSchema)
 
     if (!result.success) {
-      logger.warn({ errors: result.errors }, 'Validation errors on sign-in form')
+      c.var.logger.warn({ errors: result.errors }, 'Validation errors on sign-in form')
       return c.html(SignInForm({ ...form, errors: result.errors }))
     } else {
       const { data } = result
