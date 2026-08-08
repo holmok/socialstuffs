@@ -5,7 +5,8 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 **Status (2026-08-07):**
 - **Phase 1 complete** (merged): PR [#1](https://github.com/holmok/socialstuffs/pull/1) deps, [#2](https://github.com/holmok/socialstuffs/pull/2) auth hardening, [#3](https://github.com/holmok/socialstuffs/pull/3) validate-account, [#4](https://github.com/holmok/socialstuffs/pull/4) lint baseline. PR #4 also completed 2.2; PR #3 completed 7.1 and the validate-account part of 3.5.
 - **Phase 1 follow-ups complete** (merged): PR [#5](https://github.com/holmok/socialstuffs/pull/5) — 1.6, 1.7, 1.8.
-- **Phase 2 open for review** (not yet merged): PR [#6](https://github.com/holmok/socialstuffs/pull/6) JWT expiry + secure cookies (2.1), [#7](https://github.com/holmok/socialstuffs/pull/7) token entropy (2.5), [#8](https://github.com/holmok/socialstuffs/pull/8) sign-out POST + authorize (2.7, 2.8), [#9](https://github.com/holmok/socialstuffs/pull/9) middleware pipeline + secure headers + CSRF (2.3, 2.4), [#10](https://github.com/holmok/socialstuffs/pull/10) rate limiting + timing-oracle fix (2.6). This docs PR should merge alongside/after them.
+- **Phase 2 complete** (merged): PR [#6](https://github.com/holmok/socialstuffs/pull/6) JWT expiry + secure cookies (2.1), [#7](https://github.com/holmok/socialstuffs/pull/7) token entropy (2.5), [#8](https://github.com/holmok/socialstuffs/pull/8) sign-out POST + authorize (2.7, 2.8), [#9](https://github.com/holmok/socialstuffs/pull/9) middleware pipeline + secure headers + CSRF (2.3, 2.4), [#10](https://github.com/holmok/socialstuffs/pull/10) rate limiting + timing-oracle fix (2.6); docs [#11](https://github.com/holmok/socialstuffs/pull/11).
+- **Phase 3 open for review** (not yet merged): PR [#12](https://github.com/holmok/socialstuffs/pull/12) fix rate-limit test broken by the #9+#10 merge (csrf vs origin-less POST), [#13](https://github.com/holmok/socialstuffs/pull/13) password echo (3.4), [#14](https://github.com/holmok/socialstuffs/pull/14) log redaction (3.5), [#15](https://github.com/holmok/socialstuffs/pull/15) sign-up integrity (3.1, 3.2, 3.3). This docs PR should merge alongside/after them.
 
 ---
 
@@ -46,19 +47,17 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 
 ## Phase 3 — Sign-up flow integrity
 
-- [ ] **3.1 Transactional sign-up + non-fatal email** (F9, F24-part)
-  Wrap user + token inserts in `db.transaction()`; move the Postmark send after commit; on email failure, log and flash "we couldn't send your validation email" instead of 500ing. Use `.executeTakeFirstOrThrow()` instead of the `const [user] =` destructure.
+- [x] **3.1 Transactional sign-up + non-fatal email** (F9, F24-part) — *PR #15: user+token inserts in one `db.transaction()` with `.executeTakeFirstOrThrow()`; email send moved after commit and made non-fatal (logs + `info` flash, still redirects); DB failure still 500s the form*
 
-- [ ] **3.2 Validate before touching form data** (F15)
-  `sign-up-routes.ts:65-87`: check validation errors first; only then normalize email/username and run the duplicate-check query, using the parsed `result.data`. Fix `validateFormData`'s return typing (no `as T` on failure). Add the malformed-POST test (currently 500s).
+- [x] **3.2 Validate before touching form data** (F15) — *PR #15: schema errors checked before any normalize/query; `validateFormData` now returns a discriminated union (no `as T`); malformed-POST test added (500s on main)*
 
-- [ ] **3.3 Resend-validation endpoint** (F9)
-  Small route: accepts an email, if a matching `pending` user exists, issues a fresh token (new entropy per 2.5) and re-sends; neutral response either way. Unblocks accounts stranded by past sign-up failures.
+- [x] **3.3 Resend-validation endpoint** (F9) — *PR #15: rate-limited (5/hr) `GET`/`POST /resend-validation`; issues a fresh 32-char token for `pending` users; identical neutral response across match/unknown/active (residual timing side-channel documented in a code comment); linked from the validation-failure page*
 
-- [ ] **3.4 Stop echoing passwords into HTML** (F17)
-  Strip `password`/`confirmPassword` from props before re-rendering both forms.
+- [x] **3.4 Stop echoing passwords into HTML** (F17) — *PR #13: password/confirm-password `value` bindings removed from both form components; test asserts the password is absent from rendered HTML*
 
-- [ ] **3.5 Stop logging secrets; add pino `redact`** (F25) — *partially done: PR #3 removed raw tokens from the validate-account logs. Remaining: the email payload in `email-api.ts` debug log, and the `redact` config*
+- [x] **3.5 Stop logging secrets; add pino `redact`** (F25) — *PR #3 removed raw tokens from validate-account logs; PR #14 dropped the email payload from the debug log and added a pino `redact` config (headers, password/token/hash at depth; a function censor masks the token in `req.url` while keeping the route)*
+
+**Also merged during Phase 3:** PR #12 fixed the rate-limit test that #9's `csrf()` broke once #10's origin-less-POST test landed on main (a merge interaction, not a regression in either PR).
 
 ## Phase 4 — Frontend resilience & accessibility
 
