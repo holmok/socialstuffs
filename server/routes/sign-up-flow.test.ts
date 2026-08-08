@@ -19,9 +19,9 @@ const VALID_PASSWORD = 'Abcdefgh1!'
 
 type SeededUser = { id: number; uid: string; email: string }
 
-async function seedUser(name: string): Promise<SeededUser> {
+async function seedUser(name: string, domain = 'example.com'): Promise<SeededUser> {
   const username = `u${name}${suffix}`.slice(0, 15)
-  const email = `${name}-${suffix}@example.com`
+  const email = `${name}-${suffix}@${domain}`
   return await db
     .insertInto('users')
     .values({
@@ -99,6 +99,45 @@ describe('POST /sign-up', () => {
       username: `newu${suffix}`.slice(0, 15),
       email: existing.email,
       confirmEmail: existing.email,
+      password: VALID_PASSWORD,
+      confirmPassword: VALID_PASSWORD
+    })
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Email is already in use.')
+  })
+
+  test('gmail dot/plus alias of an existing email is rejected as a duplicate', async () => {
+    // normalize-email strips dots and +suffixes only for gmail/googlemail domains
+    const existing = await seedUser('aliasdup', 'gmail.com')
+    const alias = `alias.dup-${suffix}+spam@gmail.com`
+    // guard: the variant must actually collapse to the seeded account's normalized email
+    expect(normalizeEmail(alias)).toBe(normalizeEmail(existing.email))
+
+    const res = await post('/sign-up', {
+      username: `ualias${suffix}`.slice(0, 15),
+      email: alias,
+      confirmEmail: alias,
+      password: VALID_PASSWORD,
+      confirmPassword: VALID_PASSWORD
+    })
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Email is already in use.')
+    // no second account was created for the same normalized email
+    const rows = await db.selectFrom('users').where('normalizedEmail', '=', normalizeEmail(alias)).select(['id']).execute()
+    expect(rows.length).toBe(1)
+  })
+
+  test('uppercase variant of an existing email is rejected as a duplicate', async () => {
+    const existing = await seedUser('casedup')
+    const alias = existing.email.toUpperCase()
+    expect(normalizeEmail(alias)).toBe(normalizeEmail(existing.email))
+
+    const res = await post('/sign-up', {
+      username: `ucase${suffix}`.slice(0, 15),
+      email: alias,
+      confirmEmail: alias,
       password: VALID_PASSWORD,
       confirmPassword: VALID_PASSWORD
     })
