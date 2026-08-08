@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `bun test` — run tests (`bun:test`, zero setup)
 
-There is no build step; the server runs TypeScript directly via Bun. Tests live next to the code they cover (e.g. `server/routes/sign-up-routes.test.ts`). The integration tests run against the dev database from `.env` — they seed uniquely-suffixed rows and clean up in `afterAll`. Note: `bun test` forces `NODE_ENV=test`, which the config's Zod enum rejects, so tests pin `process.env.NODE_ENV = 'development'` before `LoadConfig()`.
+There is no build step; the server runs TypeScript directly via Bun. Tests live next to the code they cover (e.g. `server/routes/sign-up-routes.test.ts`). The integration tests run against the dev database from `.env` — they seed uniquely-suffixed rows and clean up in `afterAll`. `bun test` forces `NODE_ENV=test`, which the config's NODE_ENV enum accepts (`isDev` and `isProd` are both false under it).
 
 ## What this is
 

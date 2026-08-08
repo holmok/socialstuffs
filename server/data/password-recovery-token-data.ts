@@ -4,7 +4,7 @@ export type PasswordRecoveryTable = {
   id: Generated<number>
   userId: ColumnType<number, number, never>
   token: ColumnType<string, string, never>
-  claimed: ColumnType<Date, never, Date>
+  claimed: ColumnType<Date | null, never, Date>
   created: ColumnType<Date, never, never>
 }
 
