@@ -48,6 +48,16 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
           return c.html(SignInForm({ ...data, errors: { form: ['Invalid sign in.'] } }))
         }
 
+        if (user.status === 'pending') {
+          logger.warn({ userId: user.id }, 'Sign-in attempt for pending account')
+          return c.html(SignInForm({ ...data, errors: { form: ['Please validate your email address before signing in.'] } }))
+        }
+
+        if (user.status !== 'active') {
+          logger.warn({ userId: user.id, status: user.status }, 'Sign-in attempt for non-active account')
+          return c.html(SignInForm({ ...data, errors: { form: ['Invalid sign in.'] } }))
+        }
+
         await auth.setUser({
           uid: user.uid,
           username: user.username,
