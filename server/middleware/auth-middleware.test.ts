@@ -3,6 +3,7 @@ import { type AuthContext, authenticate, authorize, type UserContext } from '@mi
 import { configContext } from '@middleware/config-middleware'
 import { dataContext } from '@middleware/data-middleware'
 import { Hono } from 'hono'
+import type { PinoLogger } from 'hono-pino'
 import { getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { sign, verify } from 'hono/jwt'
 import pino from 'pino'
@@ -14,7 +15,7 @@ const logger = pino({ level: 'silent' })
 function appWithUser(user: UserContext | undefined) {
   const app = new Hono()
   app.use('*', async (c, next) => {
-    c.set('logger', logger)
+    c.set('logger', logger as unknown as PinoLogger)
     const auth: AuthContext = {
       user,
       getUser: async () => undefined,

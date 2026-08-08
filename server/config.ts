@@ -2,43 +2,39 @@ import type { PoolConfig } from 'pg'
 import type pino from 'pino'
 import { z } from 'zod'
 
-const APP_NAME = 'bun-hono-htmx'
+const APP_NAME = 'socialstuffs'
 
-const envSchema = z.object({
-  PORT: z
-    .string()
-    .default('3000')
-    .transform((val) => Number(val)),
+export const envSchema = z.object({
+  PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default('localhost'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOG_NAME: z.string().default(APP_NAME),
-  DATABASE_URL: z.string(),
-  DATABASE_SCHEMA: z.string(),
-  DATABASE_MAX_CLIENTS: z
-    .string()
-    .default('10')
-    .transform((val) => Number(val)),
-  DATABASE_MIN_CLIENTS: z
-    .string()
-    .default('1')
-    .transform((val) => Number(val)),
-  AXIOM_DATASET: z.string(),
-  AXIOM_TOKEN: z.string(),
-  POSTMARK_TOKEN: z.string(),
-  FROM_EMAIL: z.string(),
-  BASE_LINK_URL: z.string().default('http://localhost:3000'),
-  BASE_IMAGE_URL: z.string().default('https://storage.googleapis.com/social-stuffs-images'),
-  JWT_SECRET: z.string(),
-  COOKIE_SECRET: z.string(),
-  COOKIE_NAME_USER: z.string(),
-  COOKIE_NAME_SESSION: z.string()
+  DATABASE_URL: z.url(),
+  DATABASE_SCHEMA: z.string().min(1),
+  DATABASE_MAX_CLIENTS: z.coerce.number().int().positive().default(10),
+  DATABASE_MIN_CLIENTS: z.coerce.number().int().nonnegative().default(1),
+  AXIOM_DATASET: z.string().min(1),
+  AXIOM_TOKEN: z.string().min(1),
+  POSTMARK_TOKEN: z.string().min(1),
+  FROM_EMAIL: z.email(),
+  BASE_LINK_URL: z.url().default('http://localhost:3000'),
+  BASE_IMAGE_URL: z.url().default('https://storage.googleapis.com/social-stuffs-images'),
+  JWT_SECRET: z.string().min(1),
+  COOKIE_SECRET: z.string().min(1),
+  COOKIE_NAME_USER: z.string().min(1),
+  COOKIE_NAME_SESSION: z.string().min(1)
 })
 
 export type Config = ReturnType<typeof LoadConfig>
 
 export default function LoadConfig() {
-  const env = envSchema.parse(process.env)
+  const parsed = envSchema.safeParse(process.env)
+  if (!parsed.success) {
+    console.error(`Invalid environment configuration:\n${z.prettifyError(parsed.error)}`)
+    process.exit(1)
+  }
+  const env = parsed.data
 
   const poolConfig: PoolConfig = {
     connectionString: env.DATABASE_URL,
@@ -129,6 +125,7 @@ export default function LoadConfig() {
       token: env.AXIOM_TOKEN
     },
     dbSchema: env.DATABASE_SCHEMA,
+    logLevel: env.LOG_LEVEL,
     server: {
       port: env.PORT,
       host: env.HOST

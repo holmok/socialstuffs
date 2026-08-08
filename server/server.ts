@@ -11,6 +11,7 @@ import { compress } from 'hono/compress'
 import { csrf } from 'hono/csrf'
 import { etag } from 'hono/etag'
 import { secureHeaders } from 'hono/secure-headers'
+import type { PinoLogger } from 'hono-pino'
 import type { Logger } from 'pino'
 import type { Config } from '@/config'
 
@@ -19,7 +20,7 @@ declare module 'hono' {
     db: ReturnType<typeof data>
     auth: AuthContext
     api: API
-    logger: Logger
+    logger: PinoLogger
     config: Config
     session: SessionContext
     flash: FlashContext

@@ -48,7 +48,7 @@ const signUpSchema = z
       .regex(/[^_]$/, 'Username cannot end with an underscore.')
       .regex(/^[^0-9]/, 'Username cannot start with a number.'),
     email: z
-      .email({ message: 'Invalid email address' })
+      .email({ error: 'Invalid email address' })
       .min(1, 'Email is required.')
       .max(255, 'Email must be at most 255 characters long.'),
     confirmEmail: z.string().min(1, 'Confirm Email is required.'),
@@ -64,11 +64,11 @@ const signUpSchema = z
     confirmPassword: z.string().min(1, 'Confirm Password is required.')
   })
   .refine((data) => data.email === data.confirmEmail, {
-    message: 'Emails do not match.',
+    error: 'Emails do not match.',
     path: ['confirmEmail']
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match.',
+    error: 'Passwords do not match.',
     path: ['confirmPassword']
   })
 

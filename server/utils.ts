@@ -1,8 +1,9 @@
 import type data from '@data/index'
 import type { Server } from 'bun'
 import type { Context } from 'hono'
+import type { PinoLogger } from 'hono-pino'
 import type { Logger } from 'pino'
-import type { z } from 'zod'
+import { z } from 'zod'
 
 export function redirect(c: Context, path: string) {
   const isHtmx = c.req.header('HX-Request') === 'true'
@@ -14,7 +15,7 @@ export function redirect(c: Context, path: string) {
   }
 }
 
-export function logError(logger: Logger, error: unknown, message: string) {
+export function logError(logger: Logger | PinoLogger, error: unknown, message: string) {
   const errorMessage = error instanceof Error ? error.message : String(error)
   const errorStack = error instanceof Error ? error.stack : undefined
   logger.error({ error: errorMessage, stack: errorStack }, message)
@@ -86,14 +87,8 @@ export type ValidateFormResult<T> =
 export function validateFormData<T>(data: Record<string, unknown>, schema: z.ZodType<T>): ValidateFormResult<T> {
   const result = schema.safeParse(data)
   if (!result.success) {
-    const errors: Partial<Record<keyof T, string[]>> = {}
-    result.error.issues.forEach((err) => {
-      const key = err.path[0] as keyof T
-      const messages = errors[key] ?? []
-      messages.push(err.message)
-      errors[key] = messages
-    })
-    return { success: false, data, errors }
+    const { fieldErrors } = z.flattenError(result.error)
+    return { success: false, data, errors: fieldErrors }
   }
   return { success: true, data: result.data, errors: {} }
 }
