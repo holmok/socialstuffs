@@ -19,7 +19,8 @@ export function session(): MiddlewareHandler {
       sessionId = uniquey.create()
       await cookie.setSignedCookie(c, config.auth.sessionCookieName, sessionId, config.auth.cookieSecret, {
         httpOnly: true,
-        sameSite: 'strict'
+        sameSite: 'strict',
+        secure: config.mode.isProd
       })
     }
     const session: SessionContext = {

@@ -42,6 +42,7 @@ export function authenticate(): MiddlewareHandler {
         await cookie.setSignedCookie(c, config.auth.userCookieName, '', config.auth.cookieSecret, {
           httpOnly: true,
           sameSite: 'strict',
+          secure: config.mode.isProd,
           maxAge: 0
         })
       }
@@ -49,10 +50,12 @@ export function authenticate(): MiddlewareHandler {
     const auth: AuthContext = {
       user: userContext,
       async setUser(userContext: UserContext) {
-        const token = jwt.sign(userContext, config.auth.jwtSecret)
+        const token = jwt.sign(userContext, config.auth.jwtSecret, { expiresIn: '7d', algorithm: 'HS256' })
         await cookie.setSignedCookie(c, config.auth.userCookieName, token, config.auth.cookieSecret, {
           httpOnly: true,
-          sameSite: 'strict'
+          sameSite: 'strict',
+          secure: config.mode.isProd,
+          maxAge: 60 * 60 * 24 * 7
         })
       },
       async getUser() {
@@ -64,6 +67,7 @@ export function authenticate(): MiddlewareHandler {
         await cookie.setSignedCookie(c, config.auth.userCookieName, '', config.auth.cookieSecret, {
           httpOnly: true,
           sameSite: 'strict',
+          secure: config.mode.isProd,
           maxAge: 0
         })
       }
