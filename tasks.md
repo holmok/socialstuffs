@@ -9,7 +9,8 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 - **Phase 3 complete** (merged): PR [#12](https://github.com/holmok/socialstuffs/pull/12) rate-limit test fix, [#13](https://github.com/holmok/socialstuffs/pull/13) password echo (3.4), [#14](https://github.com/holmok/socialstuffs/pull/14) log redaction (3.5), [#15](https://github.com/holmok/socialstuffs/pull/15) sign-up integrity (3.1, 3.2, 3.3); docs [#16](https://github.com/holmok/socialstuffs/pull/16).
 - **Phase 4 complete** (merged): PR [#17](https://github.com/holmok/socialstuffs/pull/17) form PE + feedback + a11y (4.1, 4.2, 4.4), [#18](https://github.com/holmok/socialstuffs/pull/18) preserve forms on error (4.3), [#19](https://github.com/holmok/socialstuffs/pull/19) password recovery (4.5); docs [#20](https://github.com/holmok/socialstuffs/pull/20).
 - **Phase 5 complete** (merged): PR [#21](https://github.com/holmok/socialstuffs/pull/21) email client/template reuse (5.4), [#22](https://github.com/holmok/socialstuffs/pull/22) kvStorage sweep + pool/shutdown/logging hardening (5.2, 5.5), [#23](https://github.com/holmok/socialstuffs/pull/23) cheap flash reads (5.1), [#24](https://github.com/holmok/socialstuffs/pull/24) versioned/immutable static caching + ETag (5.3); docs [#25](https://github.com/holmok/socialstuffs/pull/25).
-- **Phase 6 open for review** (not yet merged): PR [#26](https://github.com/holmok/socialstuffs/pull/26) Kysely types + dead code (6.3, 6.6-part), [#27](https://github.com/holmok/socialstuffs/pull/27) tsconfig light touch (6.5), [#28](https://github.com/holmok/socialstuffs/pull/28) hono/jwt migration (6.4), [#29](https://github.com/holmok/socialstuffs/pull/29) Zod 4 + pino wiring/typing + APP_NAME (6.1, 6.2, 6.6-part). This docs PR should merge alongside/after them.
+- **Phase 6 complete** (merged): PR [#26](https://github.com/holmok/socialstuffs/pull/26) Kysely types + dead code (6.3, 6.6-part), [#27](https://github.com/holmok/socialstuffs/pull/27) tsconfig light touch (6.5), [#28](https://github.com/holmok/socialstuffs/pull/28) hono/jwt migration (6.4), [#29](https://github.com/holmok/socialstuffs/pull/29) Zod 4 + pino wiring/typing + APP_NAME (6.1, 6.2, 6.6-part); docs [#30](https://github.com/holmok/socialstuffs/pull/30).
+- **Phase 7 open for review** (not yet merged): PR [#31](https://github.com/holmok/socialstuffs/pull/31) report-only coverage tooling (`test`/`test:coverage` scripts + `bunfig.toml`), [#32](https://github.com/holmok/socialstuffs/pull/32) flash/session + error-middleware tests (7.4, 7.5), [#33](https://github.com/holmok/socialstuffs/pull/33) sign-in/sign-up/JWT route tests (7.2, 7.3). This docs PR should merge after them.
 
 ---
 
@@ -111,10 +112,12 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 Targets in value order — 7.1 belongs inside task 1.2, and 7.2/7.3 should land with Phases 2–3 rather than after:
 
 - [x] **7.1** `/validate-account` integration (non-aligned ids, reuse, expiry, wrong uid) — *done, PR #3: `server/routes/sign-up-routes.test.ts`, 5 tests against the real dev DB with full cleanup*
-- [ ] **7.2** Sign-up POST (duplicates incl. normalize-email aliases, malformed payloads, failure-after-insert)
-- [ ] **7.3** Sign-in + auth round-trip (statuses, garbage/rotated-secret cookie, JWT expiry)
-- [ ] **7.4** Flash/session lifecycle (add→render→clear, expiry, redirect race, first-visit parallel requests)
-- [ ] **7.5** Error middleware branching (HTMX vs full-page, 401 redirect both ways, dev-only stack)
+- [x] **7.2** Sign-up POST (duplicates incl. normalize-email aliases, malformed payloads, failure-after-insert) — *done, PR #33: normalize-email alias duplicate tests added to `sign-up-flow.test.ts` (the malformed-POST case landed earlier with #15)*
+- [x] **7.3** Sign-in + auth round-trip (statuses, garbage/rotated-secret cookie, JWT expiry) — *done, PR #33: new `server/routes/sign-in-flow.test.ts` (active happy path with verified JWT claims + ~7-day exp, pending message, deleted/inactive/wrong-password share one generic error, no cookie leaks) plus the rotated-secret rejection case in `auth-middleware.test.ts`*
+- [x] **7.4** Flash/session lifecycle (add→render→clear, expiry, redirect race, first-visit parallel requests) — *done, PR #32: `flash-middleware.test.ts` — kv expiry read/sweep semantics, add→render→clear across a real redirect sequence, concurrent first-visit session handling*
+- [x] **7.5** Error middleware branching (HTMX vs full-page, 401 redirect both ways, dev-only stack) — *done, PR #32: `error-middleware.test.ts` — non-HTMX 401 plain redirect, dev-only 5xx stack traces never leaking in prod pages or the HTMX/OOB fragment*
+
+**Also in Phase 7:** PR #31 added report-only coverage tooling — `bun run test` / `bun run test:coverage` scripts and a `bunfig.toml` `[test]` section (text + lcov reporters into gitignored `coverage/`, test files skipped, no thresholds; plain `bun test` unaffected).
 
 ---
 
