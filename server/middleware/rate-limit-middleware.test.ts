@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
-import { __resetRateLimits } from '@middleware/rate-limit-middleware'
+import { __fillRateLimitKeys, __resetRateLimits } from '@middleware/rate-limit-middleware'
 import pino from 'pino'
 import LoadConfig from '@/config'
 import { createApp } from '@/server'
@@ -52,5 +52,28 @@ describe('rateLimit', () => {
 
     const limited = await signIn('10.0.0.250, 198.51.100.7')
     expect(limited.status).toBe(429)
+  })
+})
+
+describe('rateLimit overflow (MAX_TRACKED_KEYS)', () => {
+  beforeEach(() => {
+    __resetRateLimits()
+  })
+
+  test('a key-flood past the cap preserves existing blocks and lets new keys pass untracked', async () => {
+    for (let i = 0; i < 10; i++) {
+      expect((await signIn('203.0.113.20')).status).toBe(200)
+    }
+    expect((await signIn('203.0.113.20')).status).toBe(429)
+
+    // flood the map past the 10k cap with unexpired keys
+    __fillRateLimitKeys(10_001, 60_000)
+
+    // the existing block must survive (previously windows.clear() wiped it)
+    expect((await signIn('203.0.113.20')).status).toBe(429)
+    // a brand-new key passes untracked instead of wiping state or being denied
+    expect((await signIn('203.0.113.77')).status).toBe(200)
+    // and the block still stands afterwards
+    expect((await signIn('203.0.113.20')).status).toBe(429)
   })
 })

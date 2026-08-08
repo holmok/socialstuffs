@@ -102,7 +102,7 @@ All three `setSignedCookie` calls set `httpOnly: true, sameSite: 'strict'` but n
 
 ## P1 — High
 
-### F7. No rate limiting or brute-force protection anywhere — ✅ Fixed (PR #10): in-memory per-IP fixed-window limiter on auth endpoints
+### F7. No rate limiting or brute-force protection anywhere — ✅ Fixed (PR #10): in-memory per-IP fixed-window limiter on auth endpoints. Follow-up (followup.md FU-4/FU-5): kv-backed per-account sign-in lockout (10 failures/15 min across any IPs, cleared on success) and the limiter's overflow no longer wipes existing windows
 `server/server.ts:33-46` (verified: no rate-limit middleware exists in the codebase)
 
 `/sign-in`, `/sign-up`, and `/validate-account/:token/:uid` are unthrottled. Consequences: unlimited credential stuffing (bcrypt cost 10 ≈ 100 ms/attempt, trivially parallelized); unlimited outbound Postmark email via sign-up (email bombing, real cost); unthrottled token guessing — which matters directly because of F8.
