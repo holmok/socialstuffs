@@ -55,3 +55,11 @@ describe('config pino redaction', () => {
     expect(out.passwordHash).toBe('[redacted]')
   })
 })
+
+describe('config poolConfig', () => {
+  test('sets pool timeouts (F33 / tasks.md 5.5)', () => {
+    const { poolConfig } = LoadConfig()
+    expect(poolConfig.connectionTimeoutMillis).toBe(5000)
+    expect(poolConfig.idleTimeoutMillis).toBe(30000)
+  })
+})

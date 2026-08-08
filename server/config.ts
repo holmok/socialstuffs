@@ -43,7 +43,9 @@ export default function LoadConfig() {
   const poolConfig: PoolConfig = {
     connectionString: env.DATABASE_URL,
     max: env.DATABASE_MAX_CLIENTS,
-    min: env.DATABASE_MIN_CLIENTS
+    min: env.DATABASE_MIN_CLIENTS,
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000
   }
 
   // Defense-in-depth: scrub secrets/PII from any log object regardless of where it appears.
