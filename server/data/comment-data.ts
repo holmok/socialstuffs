@@ -6,7 +6,7 @@ export type CommentTable = {
   postId: ColumnType<number, number, never>
   userUid: ColumnType<string, string, never>
   userId: ColumnType<number, number, never>
-  content: ColumnType<string, string, string>
+  content: string
   created: ColumnType<Date, never, never>
   updated: ColumnType<Date | null, never, Date>
 }
