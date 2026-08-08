@@ -5,7 +5,13 @@
 
 **Overall shape:** The architecture is clean and idiomatic in its bones — typed `ContextVariableMap`, small single-purpose middleware, parameterized Kysely everywhere (no SQL injection surface), auto-escaping JSX (no XSS found), `Bun.password` bcrypt, signed cookies, correct `HX-Redirect`/303 handling. The problems cluster in four places: **the account-validation flow is actually broken**, **auth sessions are effectively permanent and status is never enforced**, **the flash/session layer has races and runs where it shouldn't**, and **a set of one-line hardening wins (secure cookies, secureHeaders, csrf, jwt try/catch) were never applied**.
 
-**Resolution status (updated 2026-08-07):** All P0 findings are fixed and merged — F1 (PR [#3](https://github.com/holmok/socialstuffs/pull/3)), F2 (PR [#1](https://github.com/holmok/socialstuffs/pull/1)), F3 + F4 (PR [#2](https://github.com/holmok/socialstuffs/pull/2)); F5 and F6 remain open. Also fixed: F11 and F32 (PR [#4](https://github.com/holmok/socialstuffs/pull/4)); partial progress on F25 (validate-account no longer logs tokens) and F28 (`claimed` type fixed for validation tokens only). See [tasks.md](tasks.md) for the live checklist.
+**Resolution status (updated 2026-08-07):**
+- **P0 — all fixed and merged:** F1 (PR [#3](https://github.com/holmok/socialstuffs/pull/3)), F2 (PR [#1](https://github.com/holmok/socialstuffs/pull/1)), F3 + F4 (PR [#2](https://github.com/holmok/socialstuffs/pull/2)).
+- **P1 — all fixed** (merged Phase 1: F11, F32 via PR [#4](https://github.com/holmok/socialstuffs/pull/4); open Phase 2 PRs awaiting merge: F5 + F6 via [#6](https://github.com/holmok/socialstuffs/pull/6), F8 via [#7](https://github.com/holmok/socialstuffs/pull/7), F12 + F13 via [#9](https://github.com/holmok/socialstuffs/pull/9), F7 + F20 via [#10](https://github.com/holmok/socialstuffs/pull/10)).
+- **P2/P3 — fixed so far:** F18 + F19 (PR [#8](https://github.com/holmok/socialstuffs/pull/8)); partial: F25 (validate-account no longer logs tokens — email payload + `redact` remain), F28 (`claimed` fixed for both token tables via PRs #3 + #5; `lastLogin`/`imageUrl` remain).
+- Phase 1 follow-ups (PR [#5](https://github.com/holmok/socialstuffs/pull/5)): local `typescript` dep, password-recovery `claimed` type, `NODE_ENV=test` support.
+
+See [tasks.md](tasks.md) for the live checklist.
 
 **Priority scale:**
 - **P0 — Broken or exploitable now.** Fix before anything else.
@@ -72,14 +78,14 @@ After password verification, `user.status` (`pending | active | deleted | inacti
 
 **Fix:** After password verification, reject unless `status === 'active'` — distinct "please validate your email" message for `pending`, generic invalid-sign-in for `deleted`/`inactive`. Have `authorize()` also check status (see F5 for why claims alone can't be trusted).
 
-### F5. Auth JWT never expires and cannot be revoked
+### F5. Auth JWT never expires and cannot be revoked — ✅ Fixed (PR #6): 7-day expiry + matching cookie maxAge
 `server/middleware/auth-middleware.ts:40-44, 51-57`
 
 `jwt.sign(userContext, secret)` sets no `expiresIn`; the cookie has no `maxAge`. `signOut()` only clears the browser cookie — the JWT stays valid forever and nothing server-side can invalidate it. Routes build `c.var.auth.user` purely from JWT claims (line 36) and never re-check the DB (`getUser()` exists but is never called). Combined with F4: a stolen cookie is permanent access; banning or demoting a user does nothing to their existing sessions; a user demoted from `admin` keeps the `role: 'admin'` claim indefinitely.
 
 **Fix:** `jwt.sign(claims, secret, { expiresIn: '7d', algorithm: 'HS256' })` plus matching cookie `maxAge`. For authorization decisions on status/role, either re-load from DB or keep the JWT short-lived (hours) and refresh it.
 
-### F6. Cookies missing the `Secure` flag
+### F6. Cookies missing the `Secure` flag — ✅ Fixed (PR #6): `secure: config.mode.isProd` on all cookie sites
 `server/middleware/auth-middleware.ts:41-44, 52-56`, `server/middleware/session-middleware.ts:21-24`
 
 All three `setSignedCookie` calls set `httpOnly: true, sameSite: 'strict'` but never `secure: true`. Production runs behind an ngrok HTTPS tunnel while the origin itself is plain HTTP, so browsers will send the auth and session cookies over any `http://` request to the host — session disclosure to any network attacker.
@@ -90,14 +96,14 @@ All three `setSignedCookie` calls set `httpOnly: true, sameSite: 'strict'` but n
 
 ## P1 — High
 
-### F7. No rate limiting or brute-force protection anywhere
+### F7. No rate limiting or brute-force protection anywhere — ✅ Fixed (PR #10): in-memory per-IP fixed-window limiter on auth endpoints
 `server/server.ts:33-46` (verified: no rate-limit middleware exists in the codebase)
 
 `/sign-in`, `/sign-up`, and `/validate-account/:token/:uid` are unthrottled. Consequences: unlimited credential stuffing (bcrypt cost 10 ≈ 100 ms/attempt, trivially parallelized); unlimited outbound Postmark email via sign-up (email bombing, real cost); unthrottled token guessing — which matters directly because of F8.
 
 **Fix:** Per-IP + per-account rate limiting on auth endpoints (`hono-rate-limiter`, or a kvStorage-backed counter since that plumbing exists), plus failed-login backoff.
 
-### F8. Security tokens have ~47 bits of entropy, with modulo bias
+### F8. Security tokens have ~47 bits of entropy, with modulo bias — ✅ Fixed (PR #7): 32-char (~190-bit) session ids and validation tokens
 `server/routes/sign-up-routes.ts:12,100,110`, `server/middleware/session-middleware.ts:13,20`
 
 `new Uniquey()` defaults to length 8 over a 62-char alphabet ≈ 47.6 bits, and its byte-mapping uses `x % 62`, so 8 characters are ~1.5× more likely than the rest — effective entropy is lower still. This generates account-validation tokens, user `uid`s, and session ids. OWASP recommends ≥128 bits for security tokens/session ids. Session ids are HMAC-signed in the cookie (forgery requires `COOKIE_SECRET`), which mitigates but shouldn't be the only barrier; validation tokens have no such second factor and (per F1) never expire — with no rate limiting (F7), online guessing is plausible defense-in-depth failure.
@@ -125,7 +131,7 @@ Flagged independently by three review passes. `addFlash` performs a kv read + up
 
 **Fix:** `await` all four calls (handlers are already async). Consider enabling Biome's `noFloatingPromises` rule, which would have caught this.
 
-### F12. The full middleware chain runs on every static asset request — including a session-cookie race
+### F12. The full middleware chain runs on every static asset request — including a session-cookie race — ✅ Fixed (PR #9): static served before the auth/session chain
 `server/server.ts:33-46`, `server/middleware/session-middleware.ts:19-25`
 
 `serveStatic` is registered last, so a request for `/js/htmx.min.js` or a favicon still executes: signed-cookie HMAC verify + `jwt.verify` (auth), a second HMAC verify plus possible signed Set-Cookie (session), flash/layout setup, and a hono-pino log line. A first page view fans out to ~7 asset requests, each paying 2-3 WebCrypto HMAC ops for nothing.
@@ -134,7 +140,7 @@ The sharper edge: on a first visit, the parallel cookie-less asset requests **ea
 
 **Fix:** Register static serving (with `staticCache`) *before* the auth/session/flash/layout middleware, or scope those middleware away from `/js/*`, favicon, and manifest paths. This fixes the race and the waste in one move.
 
-### F13. No `secureHeaders()` and no `csrf()` middleware
+### F13. No `secureHeaders()` and no `csrf()` middleware — ✅ Fixed (PR #9): both registered with a real CSP
 `server/server.ts:26-50`
 
 No CSP, `X-Frame-Options`/`frame-ancestors`, `X-Content-Type-Options`, `Referrer-Policy`, or HSTS on any response; pages are framable (clickjacking on the HTMX forms). CSRF protection is solely `SameSite=Strict` — acceptable for today's pre-auth POSTs, but the moment post/comment/favorite routes land, the app's entire CSRF posture is one cookie attribute. Hono ships both fixes: `secureHeaders()` and `csrf()` (Origin + Sec-Fetch-Site validation, zero config).
@@ -175,21 +181,21 @@ On validation failure the forms re-render with `value={props.password}` — clea
 
 **Fix:** Strip `password`/`confirmPassword` before re-rendering; the user retypes.
 
-### F18. Sign-out is a state-changing GET
+### F18. Sign-out is a state-changing GET — ✅ Fixed (PR #8): now POST via a nav form
 `server/routes/user-routes.ts:18-23`, `templates/components/navigation.tsx:31`
 
 Prefetchers and link scanners can sign users out; `csrf()` can't protect GET. It also calls `c.redirect` directly instead of `utils.redirect`, so an HTMX-triggered call wouldn't redirect properly.
 
 **Fix:** POST route + a small form (or `hx-post` button) styled as a nav link; use `utils.redirect`.
 
-### F19. `authorize({ roles })` without `requireAuth` silently admits anonymous users
+### F19. `authorize({ roles })` without `requireAuth` silently admits anonymous users — ✅ Fixed (PR #8): roles now imply authentication
 `server/middleware/auth-middleware.ts:73-80`
 
 The role check is `if (opts.roles && user && ...)` — with no user, it falls through to `next()`. Not exploitable today (the sole usage sets `requireAuth: true`), but the first `authorize({ roles: ['admin'] })` someone writes is an open admin route.
 
 **Fix:** `roles` implies authentication: missing user → 401, wrong role → 403.
 
-### F20. User enumeration via sign-up oracle and sign-in timing
+### F20. User enumeration via sign-up oracle and sign-in timing — ⚠️ Partially fixed (PR #10): sign-in timing oracle closed with a dummy bcrypt verify; sign-up email oracle remains (mitigated by rate limiting)
 `server/routes/sign-up-routes.ts:77-84`, `server/routes/sign-in-routes.ts:37-49`
 
 Sign-up returns "Email is already in use" with no rate limit in front of it — a registration oracle. Sign-in's message is correctly identical for both failure cases, but it skips the ~100 ms bcrypt verify when the user doesn't exist — a measurable timing oracle.
@@ -247,7 +253,7 @@ Three distinct issues: (a) in dev, `config.pino` contains `transport: pino-prett
 
 `z.string().default('3000').transform(Number)` for PORT and pool sizes: `Number('abc')` silently yields NaN — no validation. Zod 4's idiom is `z.coerce.number().int().positive().default(3000)`; also `z.url()` for `DATABASE_URL`/`BASE_LINK_URL`, `z.email()` for `FROM_EMAIL`. `validateFormData` hand-reimplements `z.flattenError` and returns an unsound cast (see F15). `z.email({ message: ... })` uses the deprecated v3 param name — v4 renamed it to `error`. `@hono/zod-validator` (`zValidator('form', schema, hook)`) would replace the whole formData→cast→validate dance including the error re-render.
 
-### F28. Kysely: nullable columns typed as non-nullable or `undefined` — ⚠️ partially fixed (PR #3 corrected `claimed` for validation tokens; password-recovery `claimed`, `lastLogin`, `imageUrl` remain)
+### F28. Kysely: nullable columns typed as non-nullable or `undefined` — ⚠️ partially fixed (PR #3 + #5 corrected `claimed` on both token tables; `lastLogin`, `imageUrl`, and the `ColumnType<X,X,X>` cleanup remain — see task 6.3)
 `server/data/account-validation-token-data.ts:7`, `server/data/password-recovery-token-data.ts:7`, `server/data/user-data.ts:21`, `server/data/post-data.ts:11-13`
 
 `claimed` is typed `ColumnType<Date, never, Date>` but is NULL until claimed — the validate-account code relies on its falsiness, contradicting the type. `lastLogin` is non-null `Date` but never written. `imageUrl` selects as `string | undefined`; pg returns `null`. These types will type-check code that breaks at runtime (`claimed.getTime()` on null). Minor consistency notes: `ColumnType<X,X,X>` triples should just be `X`; `posts.uid` is db-generated while `users.uid`/`comments.uid` are app-supplied — pick one convention; `relations.updated`/`postTargets.updated` are never-updateable unlike every other table.

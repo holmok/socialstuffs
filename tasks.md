@@ -2,7 +2,10 @@
 
 Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases are ordered by dependency and severity; tasks within a phase are independent unless noted. Each task is scoped to roughly one sitting.
 
-**Status (2026-08-07):** Phase 1 complete — merged as PR [#1](https://github.com/holmok/socialstuffs/pull/1) (deps), [#2](https://github.com/holmok/socialstuffs/pull/2) (auth hardening), [#3](https://github.com/holmok/socialstuffs/pull/3) (validate-account), [#4](https://github.com/holmok/socialstuffs/pull/4) (lint baseline). PR #4 also completed task 2.2, and PR #3 completed 7.1 and the validate-account portion of 3.5. New follow-ups from review are listed at the end of Phase 1.
+**Status (2026-08-07):**
+- **Phase 1 complete** (merged): PR [#1](https://github.com/holmok/socialstuffs/pull/1) deps, [#2](https://github.com/holmok/socialstuffs/pull/2) auth hardening, [#3](https://github.com/holmok/socialstuffs/pull/3) validate-account, [#4](https://github.com/holmok/socialstuffs/pull/4) lint baseline. PR #4 also completed 2.2; PR #3 completed 7.1 and the validate-account part of 3.5.
+- **Phase 1 follow-ups complete** (merged): PR [#5](https://github.com/holmok/socialstuffs/pull/5) — 1.6, 1.7, 1.8.
+- **Phase 2 open for review** (not yet merged): PR [#6](https://github.com/holmok/socialstuffs/pull/6) JWT expiry + secure cookies (2.1), [#7](https://github.com/holmok/socialstuffs/pull/7) token entropy (2.5), [#8](https://github.com/holmok/socialstuffs/pull/8) sign-out POST + authorize (2.7, 2.8), [#9](https://github.com/holmok/socialstuffs/pull/9) middleware pipeline + secure headers + CSRF (2.3, 2.4), [#10](https://github.com/holmok/socialstuffs/pull/10) rate limiting + timing-oracle fix (2.6). This docs PR should merge alongside/after them.
 
 ---
 
@@ -19,34 +22,27 @@ Companion to [audit.md](audit.md) — F-numbers reference findings there. Phases
 
 **Follow-ups surfaced by Phase 1 reviews:**
 
-- [ ] **1.6** Add `typescript` as a devDependency — `bun run typecheck` currently relies on a global tsc (same class of problem as F2)
-- [ ] **1.7** Fix the same `claimed` type lie in `password-recovery-token-data.ts:7` that PR #3 fixed for validation tokens (fold into 6.3, or into 4.5 when password recovery is built)
-- [ ] **1.8** Add `'test'` to the `NODE_ENV` Zod enum in `config.ts` so tests stop pinning `NODE_ENV=development` (pairs with any Phase 7 work)
+- [x] **1.6** Add `typescript` as a devDependency (F2 follow-on) — *done, PR #5: added TypeScript 7.0.2 (the native compiler — TS 5.x fails this repo's minimal tsconfig; downgrading needs the tsconfig work in 6.5)*
+- [x] **1.7** Fix the `claimed` type lie in `password-recovery-token-data.ts` (F28-part) — *done, PR #5: now `Date | null`*
+- [x] **1.8** Add `'test'` to the `NODE_ENV` Zod enum (F-config) — *done, PR #5: enum accepts `test`; the pin removed from the test file; all `isDev`/`isProd` branches degrade safely with both false*
 
 ## Phase 2 — Session & auth hardening
 
-- [ ] **2.1 JWT expiry + secure cookies** (F5, F6)
-  Add `expiresIn: '7d'` (or shorter) to `jwt.sign` and matching `maxAge` on the cookie; add `secure: config.mode.isProd` to all three `setSignedCookie` sites (auth set/clear, session). Depends on 1.3 (expired JWTs must not 500).
+- [x] **2.1 JWT expiry + secure cookies** (F5, F6) — *PR #6: 7-day `expiresIn` + matching cookie `maxAge`, `secure: config.mode.isProd` on all four cookie sites. Trap noted: never re-sign `auth.user` without destructuring — it carries runtime `iat`/`exp`*
 
 - [x] **2.2 Await the four `addFlash` calls** (F11) — *done early, PR #4: all four awaited; `errorHandler` made async for the 401 path*
 
-- [ ] **2.3 Serve static assets before the middleware chain** (F12)
-  Move `serveStatic` + `staticCache` registration ahead of auth/session/flash/layout in `server.ts` (or scope those middleware away from asset paths). Fixes the first-visit session-id clobber race and removes per-asset JWT/HMAC/logging work.
+- [x] **2.3 Serve static assets before the middleware chain** (F12) — *PR #9: static served after `compress()` but before auth/session/flash/layout; fixes the first-visit session-clobber race and per-asset JWT/HMAC/logging work*
 
-- [ ] **2.4 One-line middleware wins: `secureHeaders()` + `csrf()`** (F13)
-  Register both in `server.ts` before routes. Start CSP permissive-but-explicit (`style-src 'unsafe-inline'` for the inline style tag), tighten later.
+- [x] **2.4 `secureHeaders()` + `csrf()`** (F13) — *PR #9: CSP (`default-src 'self'`, inline style allowed), `X-Frame-Options: DENY`, csrf() Origin/Sec-Fetch-Site check. Known limit: a csrf-403 renders as a bare unstyled fragment (pre-layout error) — tracked separately*
 
-- [ ] **2.5 Token/session-id entropy** (F8)
-  `new Uniquey({ length: 32 })` (or `crypto.randomBytes(32).toString('base64url')`) for validation tokens and session ids. Keep the short 8-char uid for public user ids if you like the aesthetics — it's not a secret — but tokens must grow.
+- [x] **2.5 Token/session-id entropy** (F8) — *PR #7: 32-char (~190-bit) session ids and validation tokens; uid stays short by design (public, not a secret). DB columns confirmed unbounded `text`*
 
-- [ ] **2.6 Rate limiting on auth endpoints** (F7, F20)
-  Per-IP + per-account limits on `/sign-in`, `/sign-up`, `/validate-account` (hono-rate-limiter or a kvStorage-backed counter). While in sign-in, add the dummy-bcrypt-verify for unknown emails to kill the timing oracle.
+- [x] **2.6 Rate limiting on auth endpoints** (F7, F20) — *PR #10: in-memory per-IP fixed-window limiter (sign-in 10/15min, sign-up 10/hr, validate 20/hr) + dummy-bcrypt timing fix. Keys on the LAST X-Forwarded-For entry (ngrok appends the real IP) — depends on ngrok being the sole front proxy*
 
-- [ ] **2.7 Sign-out as POST** (F18)
-  Change route to POST using `utils.redirect`; replace the nav link with a small form/`hx-post` button styled as a link.
+- [x] **2.7 Sign-out as POST** (F18) — *PR #8: POST route via `utils.redirect`; nav link → styled form button*
 
-- [ ] **2.8 `authorize({ roles })` implies auth** (F19)
-  Missing user + roles specified → 401; wrong role → 403. Small fix in `auth-middleware.ts:73-80`, do alongside 2.7.
+- [x] **2.8 `authorize({ roles })` implies auth** (F19) — *PR #8: missing user + roles → 401; wrong role → 403; new test covers all three*
 
 ## Phase 3 — Sign-up flow integrity
 
