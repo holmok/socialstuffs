@@ -11,6 +11,8 @@ import * as utils from '@/utils'
 
 const uniquey = new Uniquey()
 
+const TOKEN_TTL_MS = 48 * 60 * 60 * 1000
+
 const signUpSchema = z
   .object({
     username: z
@@ -140,36 +142,56 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     const { db, logger } = c.var
 
     try {
-      const user = await db
-        .selectFrom('users')
-        .innerJoin('accountValidationTokens', 'users.id', 'accountValidationTokens.userId')
-        .where('accountValidationTokens.token', '=', token)
-        .where('users.uid', '=', uid)
-        .selectAll()
-        .executeTakeFirst()
-
-      const isTokenClaimed = await db
+      const tokenRow = await db
         .selectFrom('accountValidationTokens')
-        .where('token', '=', token)
-        .select(['claimed', 'userId', 'token'])
+        .innerJoin('users', 'users.id', 'accountValidationTokens.userId')
+        .where('accountValidationTokens.token', '=', token)
+        .select([
+          'accountValidationTokens.id',
+          'accountValidationTokens.userId',
+          'accountValidationTokens.claimed',
+          'accountValidationTokens.created',
+          'users.uid as userUid'
+        ])
         .executeTakeFirst()
 
       let invalidToken = false
 
-      if (!user) {
-        logger.warn({ token, uid }, 'Account validation invalid user uid')
+      if (!tokenRow) {
+        logger.warn({ uid }, 'Account validation invalid token')
+        invalidToken = true
+      } else if (tokenRow.userUid !== uid) {
+        logger.warn({ uid }, 'Account validation token does not match user')
+        invalidToken = true
+      } else if (tokenRow.claimed) {
+        logger.warn({ uid }, 'Account validation token has already been claimed')
+        invalidToken = true
+      } else if (Date.now() - tokenRow.created.getTime() > TOKEN_TTL_MS) {
+        logger.warn({ uid }, 'Account validation token has expired')
         invalidToken = true
       }
 
-      if (!isTokenClaimed) {
-        logger.warn({ token, uid }, 'Account validation invalid token')
-        invalidToken = true
-      } else if (isTokenClaimed.claimed) {
-        logger.warn({ token, uid }, 'Account validation token has already been claimed')
-        invalidToken = true
-      } else if (user && isTokenClaimed.userId !== user?.id) {
-        logger.warn({ token, uid }, 'Account validation token does not match user')
-        invalidToken = true
+      if (!invalidToken) {
+        const claimed = await db.transaction().execute(async (trx) => {
+          const claim = await trx
+            .updateTable('accountValidationTokens')
+            .set({ claimed: new Date() })
+            .where('token', '=', token)
+            .where('claimed', 'is', null)
+            .returning('userId')
+            .executeTakeFirst()
+
+          if (!claim) return false
+
+          await trx.updateTable('users').set({ status: 'active' }).where('id', '=', claim.userId).where('uid', '=', uid).execute()
+
+          return true
+        })
+
+        if (!claimed) {
+          logger.warn({ uid }, 'Account validation token was claimed concurrently')
+          invalidToken = true
+        }
       }
 
       if (invalidToken) {
@@ -180,19 +202,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
         })
       }
 
-      await db
-        .updateTable('users')
-        .set({ status: 'active' })
-        .where('id', '=', user?.id as number)
-        .execute()
-
-      await db
-        .updateTable('accountValidationTokens')
-        .set({ claimed: new Date() })
-        .where('userId', '=', user?.id as number)
-        .execute()
-
-      logger.info({ userId: user?.id, uid: user?.uid }, 'User account validated successfully')
+      logger.info({ uid }, 'User account validated successfully')
 
       return c.render(AccountValidationSuccessPage(), {
         title: 'Account Validation Success',
