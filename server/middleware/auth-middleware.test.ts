@@ -3,9 +3,9 @@ import { type AuthContext, authenticate, authorize, type UserContext } from '@mi
 import { configContext } from '@middleware/config-middleware'
 import { dataContext } from '@middleware/data-middleware'
 import { Hono } from 'hono'
-import type { PinoLogger } from 'hono-pino'
 import { getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { sign, verify } from 'hono/jwt'
+import type { PinoLogger } from 'hono-pino'
 import pino from 'pino'
 import LoadConfig from '@/config'
 import { createApp } from '@/server'
@@ -65,7 +65,7 @@ function authApp() {
   app.use('*', configContext(config))
   app.use('*', dataContext(db))
   app.use('*', async (c, next) => {
-    c.set('logger', logger)
+    c.set('logger', logger as unknown as PinoLogger)
     return next()
   })
   app.use('*', authenticate())
