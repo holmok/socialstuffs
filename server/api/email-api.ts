@@ -37,7 +37,7 @@ export default class EmailAPI {
       this.logger.error({ template: options.template }, 'EmailService.sendEmail() email template not found')
       throw new Error('Email template not found')
     }
-    this.logger.debug({ to, from, subject, template, data }, 'Email options')
+    this.logger.debug({ to, from, subject, template }, 'Email options')
     try {
       const client = new Postmark.ServerClient(this.postmarkToken)
       const html = Object.entries(data).reduce(
