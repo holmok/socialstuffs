@@ -27,9 +27,9 @@ Task numbering is FU-*n*; F-numbers reference audit.md. Grouped into suggested P
 
 ### PR C — Brute-force hardening (FU-4, FU-5)
 
-- [ ] **FU-4 Per-account sign-in throttling + failed-login backoff** (F7 residual)
+- [x] **FU-4 Per-account sign-in throttling + failed-login backoff** (F7 residual) — *done, PR [#38](https://github.com/holmok/socialstuffs/pull/38): kv-backed `failureLimit` (10 credential failures per submitted email / 15 min, across any IPs, survives restarts) → 429; cleared on successful sign-in; pending-with-correct-password doesn't count. Locks across distinct XFF values per test*
   The audit asked for per-IP **and** per-account limiting plus backoff; only per-IP landed. A distributed attacker (many IPs) can credential-stuff one account at full speed. Add a second limiter keyed on `sign-in-acct:${normalizedEmail}`, incremented only on failures (e.g. 10 failures/15 min), optionally kvStorage-backed so it survives restarts. Test: one account locks across distinct `X-Forwarded-For` values.
-- [ ] **FU-5 Rate-limiter overflow wipes all limiter state** (new finding)
+- [x] **FU-5 Rate-limiter overflow wipes all limiter state** (new finding) — *done, PR [#38](https://github.com/holmok/socialstuffs/pull/38): at the 10k-key cap new keys pass untracked; existing windows and active blocks persist (no more `windows.clear()`). Key-flood test pins it*
   `rate-limit-middleware.ts:42` — `if (windows.size > MAX_TRACKED_KEYS) windows.clear()` resets *every* counter, including windows currently blocking an attacker; a key-flood converts the memory cap into a limiter-bypass primitive. Evict expired/oldest entries instead, or refuse new keys at capacity. Test: a key-flood does not reset an already-blocked key.
 
 ---
