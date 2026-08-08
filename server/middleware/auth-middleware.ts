@@ -2,7 +2,7 @@ import type { UserData } from '@data/user-data'
 import type { MiddlewareHandler } from 'hono'
 import * as cookie from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
-import jwt from 'jsonwebtoken'
+import { sign, verify } from 'hono/jwt'
 
 export type UserContext = Pick<UserData, 'uid' | 'username' | 'status' | 'role'>
 type User = Omit<UserData, 'passwordHash' | 'normalizedUsername' | 'normalizedEmail'>
@@ -36,7 +36,13 @@ export function authenticate(): MiddlewareHandler {
     let userContext: UserContext | undefined
     if (token) {
       try {
-        userContext = jwt.verify(token, config.auth.jwtSecret, { algorithms: ['HS256'] }) as UserContext
+        const payload = await verify(token, config.auth.jwtSecret, 'HS256')
+        userContext = {
+          uid: payload.uid as string,
+          username: payload.username as string,
+          status: payload.status as UserContext['status'],
+          role: payload.role as UserContext['role']
+        }
       } catch (err) {
         logger.warn({ reason: err instanceof Error ? err.name : 'unknown' }, 'Failed to verify auth token, clearing auth cookie')
         await cookie.setSignedCookie(c, config.auth.userCookieName, '', config.auth.cookieSecret, {
@@ -50,7 +56,9 @@ export function authenticate(): MiddlewareHandler {
     const auth: AuthContext = {
       user: userContext,
       async setUser(userContext: UserContext) {
-        const token = jwt.sign(userContext, config.auth.jwtSecret, { expiresIn: '7d', algorithm: 'HS256' })
+        const { uid, username, status, role } = userContext
+        const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7
+        const token = await sign({ uid, username, status, role, exp }, config.auth.jwtSecret, 'HS256')
         await cookie.setSignedCookie(c, config.auth.userCookieName, token, config.auth.cookieSecret, {
           httpOnly: true,
           sameSite: 'strict',
