@@ -4,7 +4,9 @@ import Uniquey from 'uniquey'
 
 export type SessionContext = {
   sessionId: string
+  isNew: boolean
   getSessionValue: <T>(key: string) => Promise<T | undefined>
+  popSessionValue: <T>(key: string) => Promise<T | undefined>
   setSessionValue: <T>(key: string, value: T) => Promise<void>
   removeSessionValue: (key: string) => Promise<void>
 }
@@ -15,7 +17,9 @@ export function session(): MiddlewareHandler {
   return async (c, next) => {
     const { db, config } = c.var
     let sessionId = await cookie.getSignedCookie(c, config.auth.cookieSecret, config.auth.sessionCookieName)
+    let isNew = false
     if (!sessionId) {
+      isNew = true
       sessionId = uniquey.create()
       await cookie.setSignedCookie(c, config.auth.sessionCookieName, sessionId, config.auth.cookieSecret, {
         httpOnly: true,
@@ -25,14 +29,26 @@ export function session(): MiddlewareHandler {
     }
     const session: SessionContext = {
       sessionId,
+      isNew,
       async getSessionValue<T>(key: string) {
         const kvKey = `${sessionId}:${key}`
-        const data = await db.selectFrom('kvStorage').where('key', '=', kvKey).selectAll().executeTakeFirst()
+        const data = await db.selectFrom('kvStorage').where('key', '=', kvKey).select(['value', 'expires']).executeTakeFirst()
         if (!data) return undefined
         if (data.expires && new Date(data.expires) < new Date()) {
           await db.deleteFrom('kvStorage').where('key', '=', kvKey).execute()
           return undefined
         }
+        return JSON.parse(data.value) as T
+      },
+      async popSessionValue<T>(key: string) {
+        const kvKey = `${sessionId}:${key}`
+        const data = await db
+          .deleteFrom('kvStorage')
+          .where('key', '=', kvKey)
+          .where('expires', '>', new Date())
+          .returning('value')
+          .executeTakeFirst()
+        if (!data) return undefined
         return JSON.parse(data.value) as T
       },
       async setSessionValue<T>(key: string, value: T) {
