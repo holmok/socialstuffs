@@ -9,7 +9,8 @@ import Uniquey from 'uniquey'
 import { z } from 'zod'
 import * as utils from '@/utils'
 
-const uniquey = new Uniquey()
+const uniquey = new Uniquey() // short by design: public uid, not a secret
+const tokenUniquey = new Uniquey({ length: 32 })
 
 const TOKEN_TTL_MS = 48 * 60 * 60 * 1000
 
@@ -109,7 +110,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
           .returningAll()
           .execute()
 
-        const token = uniquey.create()
+        const token = tokenUniquey.create()
         await db
           .insertInto('accountValidationTokens')
           .values({
