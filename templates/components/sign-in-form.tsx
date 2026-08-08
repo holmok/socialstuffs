@@ -32,7 +32,6 @@ const SignInForm = (props: SignInFormProps) => {
         name="password"
         label="Password"
         type="password"
-        value={props.password}
         errors={props.errors?.password}
         placeholder="Enter a strong password..."
         required
