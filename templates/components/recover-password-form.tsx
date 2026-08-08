@@ -7,9 +7,18 @@ type RecoverPasswordFormProps = {
 
 const RecoverPasswordForm = (props: RecoverPasswordFormProps) => {
   return (
-    <form className="form" hx-post="/recover-password" hx-target="this" hx-swap="outerHTML">
+    <form
+      className="form"
+      action="/recover-password"
+      method="post"
+      hx-post="/recover-password"
+      hx-target="this"
+      hx-swap="outerHTML"
+      hx-disabled-elt="find button"
+      hx-indicator="find .form-indicator"
+    >
       {props.errors?.form && (
-        <div className="form-errors">
+        <div className="form-errors" role="alert">
           {props.errors.form.map((error, index) => (
             <p key={`form-error-${index}`}>{error}</p>
           ))}
@@ -23,9 +32,13 @@ const RecoverPasswordForm = (props: RecoverPasswordFormProps) => {
         value={props.email}
         errors={props.errors?.email}
         placeholder="Enter your email..."
+        autocomplete="email"
         required
       />
       <button type="submit">Send Reset Link</button>
+      <span className="form-indicator" aria-hidden="true">
+        Working…
+      </span>
       <p className="form-alt">
         Remembered it? <a href="/sign-in">Sign In</a>
       </p>
