@@ -85,6 +85,17 @@ function authApp() {
     })
     return c.json({ ok: true })
   })
+  // sets a signed cookie wrapping a JWT signed with a different (rotated) secret
+  app.get('/mint-rotated', async (c) => {
+    const exp = Math.floor(Date.now() / 1000) + 60 * 60
+    const token = await sign({ ...claims, exp }, `rotated-${config.auth.jwtSecret}`, 'HS256')
+    await setSignedCookie(c, config.auth.userCookieName, token, config.auth.cookieSecret, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: config.mode.isProd
+    })
+    return c.json({ ok: true })
+  })
   // sets a signed cookie wrapping a non-JWT (tampered/garbage) value
   app.get('/mint-garbage', async (c) => {
     await setSignedCookie(c, config.auth.userCookieName, 'not.a.jwt', config.auth.cookieSecret, {
@@ -131,6 +142,19 @@ describe('authenticate() hono/jwt path', () => {
   test('an expired token is rejected: request continues unauthenticated and the cookie is cleared', async () => {
     const app = authApp()
     const minted = await app.request('/mint-expired')
+    const cookie = userCookie(minted)
+
+    const res = await app.request('/whoami', { headers: { cookie } })
+    const body = (await res.json()) as { user: UserContext | null }
+    expect(body.user).toBeNull()
+    const cleared = clearedCookieHeader(res)
+    expect(cleared).toBeDefined()
+    expect(cleared).toContain('Max-Age=0')
+  })
+
+  test('a token signed with a rotated secret is rejected: request continues unauthenticated and the cookie is cleared', async () => {
+    const app = authApp()
+    const minted = await app.request('/mint-rotated')
     const cookie = userCookie(minted)
 
     const res = await app.request('/whoami', { headers: { cookie } })
