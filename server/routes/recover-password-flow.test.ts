@@ -289,3 +289,30 @@ describe('POST /recover-password/:token/:uid', () => {
     expect(await tokenClaimed(token)).not.toBeNull()
   })
 })
+
+describe('recovery form markup (no-JS fallback + a11y parity with the other auth forms)', () => {
+  test('GET /recover-password renders a native action/method fallback, autocomplete, and double-submit guards', async () => {
+    const res = await get('/recover-password')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('action="/recover-password"')
+    expect(html).toContain('method="post"')
+    expect(html).toContain('autocomplete="email"')
+    expect(html).toContain('hx-disabled-elt="find button"')
+    expect(html).toContain('hx-indicator="find .form-indicator"')
+  })
+
+  test('GET /recover-password/:token/:uid renders the set-password form with fallback and new-password autocomplete', async () => {
+    const user = await seedUser('markup')
+    const token = await insertToken(user.id)
+
+    const res = await get(`/recover-password/${token}/${user.uid}`)
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain(`action="/recover-password/${token}/${user.uid}"`)
+    expect(html).toContain('method="post"')
+    expect(html).toContain('autocomplete="new-password"')
+    expect(html).toContain('hx-disabled-elt="find button"')
+    expect(html).toContain('hx-indicator="find .form-indicator"')
+  })
+})
