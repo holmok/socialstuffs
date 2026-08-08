@@ -31,9 +31,21 @@ function mapUserToUser(user: UserData): User {
 
 export function authenticate(): MiddlewareHandler {
   return async (c, next) => {
-    const { db, config } = c.var
+    const { db, config, logger } = c.var
     const token = await cookie.getSignedCookie(c, config.auth.cookieSecret, config.auth.userCookieName)
-    const userContext = token ? (jwt.verify(token, config.auth.jwtSecret) as UserContext) : undefined
+    let userContext: UserContext | undefined
+    if (token) {
+      try {
+        userContext = jwt.verify(token, config.auth.jwtSecret, { algorithms: ['HS256'] }) as UserContext
+      } catch (err) {
+        logger.warn({ reason: err instanceof Error ? err.name : 'unknown' }, 'Failed to verify auth token, clearing auth cookie')
+        await cookie.setSignedCookie(c, config.auth.userCookieName, '', config.auth.cookieSecret, {
+          httpOnly: true,
+          sameSite: 'strict',
+          maxAge: 0
+        })
+      }
+    }
     const auth: AuthContext = {
       user: userContext,
       async setUser(userContext: UserContext) {
@@ -72,6 +84,10 @@ export function authorize(opts: AuthorizeOptions): MiddlewareHandler {
     const { user } = auth
     if (opts.requireAuth && !user) {
       logger.warn('Unauthorized access attempt to a protected route')
+      throw new HTTPException(401, { message: 'Unauthorized' })
+    }
+    if (user && user.status !== 'active') {
+      logger.warn({ user: user.username, status: user.status }, 'Unauthorized access attempt by non-active user')
       throw new HTTPException(401, { message: 'Unauthorized' })
     }
     if (opts.roles && user && !opts.roles.includes(user.role)) {
