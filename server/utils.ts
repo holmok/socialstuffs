@@ -74,10 +74,11 @@ export async function assertPortFree(host: string, port: number, logger: Logger)
   }
 }
 
-export function validateFormData<T>(
-  data: Record<string, unknown>,
-  schema: z.ZodType<T>
-): { data: T; errors: Partial<Record<keyof T, string[]>> } {
+export type ValidateFormResult<T> =
+  | { success: true; data: T; errors: Partial<Record<keyof T, string[]>> }
+  | { success: false; data: Record<string, unknown>; errors: Partial<Record<keyof T, string[]>> }
+
+export function validateFormData<T>(data: Record<string, unknown>, schema: z.ZodType<T>): ValidateFormResult<T> {
   const result = schema.safeParse(data)
   if (!result.success) {
     const errors: Partial<Record<keyof T, string[]>> = {}
@@ -87,7 +88,7 @@ export function validateFormData<T>(
       messages.push(err.message)
       errors[key] = messages
     })
-    return { data: data as T, errors }
+    return { success: false, data, errors }
   }
-  return { data: result.data, errors: {} }
+  return { success: true, data: result.data, errors: {} }
 }

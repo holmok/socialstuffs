@@ -1,12 +1,16 @@
+import type API from '@api/index'
 import AccountValidationFailurePage from '@pages/account-validation-failure'
 import AccountValidationSuccessPage from '@pages/account-validation-success'
+import ResendValidationPage from '@pages/resend-validation'
 import SignUpPage from '@pages/sign-up'
+import ResendValidationForm from '@templates/components/resend-validation-form'
 import SignUpForm from '@templates/components/sign-up-form'
 import type { Hono } from 'hono'
 import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
 import Uniquey from 'uniquey'
 import { z } from 'zod'
+import type { Config } from '@/config'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
 
@@ -14,6 +18,24 @@ const uniquey = new Uniquey() // short by design: public uid, not a secret
 const tokenUniquey = new Uniquey({ length: 32 })
 
 const TOKEN_TTL_MS = 48 * 60 * 60 * 1000
+
+// shared by sign-up and resend so the validation URL / email construction lives in one place
+async function sendValidationEmail(
+  api: API,
+  config: Config,
+  user: { username: string; uid: string; email: string },
+  token: string
+) {
+  await api.email.sendEmail({
+    to: user.email,
+    subject: 'Welcome to Social Stuffs! Please validate your account.',
+    template: 'account-validation-email',
+    data: {
+      username: user.username,
+      url: new URL(`/validate-account/${token}/${user.uid}`, config.baseLinkUrl).href
+    }
+  })
+}
 
 const signUpSchema = z
   .object({
@@ -68,10 +90,18 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
 
   app.post('/sign-up', signUpLimit, async (c) => {
     const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as SignUpData
-    const { data, errors } = utils.validateFormData<SignUpData>(form, signUpSchema)
+    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const result = utils.validateFormData<SignUpData>(form, signUpSchema)
 
     const { db, logger, api, config, flash } = c.var
+
+    // schema errors: re-render the form immediately without normalizing or touching the db
+    if (!result.success) {
+      logger.warn({ errors: result.errors }, 'Validation errors on sign-up form')
+      return c.html(SignUpForm({ ...form, errors: result.errors }))
+    }
+
+    const { data } = result
 
     const normalizedEmail = normalizeEmail(data.email)
     const normalizedUsername = data.username.toLowerCase()
@@ -85,27 +115,30 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
 
     logger.debug({ normalizedEmail, normalizedUsername, existingUsers }, 'Checking for existing user')
 
+    const errors: Partial<Record<keyof SignUpData, string[]>> = {}
     if (existingUsers.length > 0) {
       if (existingUsers.some((user) => user.normalizedEmail === normalizedEmail)) {
-        errors.email = [...(errors?.email || []), 'Email is already in use.']
+        errors.email = ['Email is already in use.']
       }
       if (existingUsers.some((user) => user.normalizedUsername === normalizedUsername)) {
-        errors.username = [...(errors?.username || []), 'Username is already in use.']
+        errors.username = ['Username is already in use.']
       }
     }
 
-    // if there are errors, return the form with errors
     if (Object.keys(errors).length > 0) {
       logger.warn({ errors }, 'Validation errors on sign-up form')
       return c.html(SignUpForm({ ...data, errors }))
-    } else {
-      try {
-        // ...otherwise create user
-        const passwordHash = await Bun.password.hash(data.password, {
-          algorithm: 'bcrypt',
-          cost: 10
-        })
-        const [user] = await db
+    }
+
+    try {
+      const passwordHash = await Bun.password.hash(data.password, {
+        algorithm: 'bcrypt',
+        cost: 10
+      })
+
+      // create the user and its validation token atomically
+      const { user, token } = await db.transaction().execute(async (trx) => {
+        const user = await trx
           .insertInto('users')
           .values({
             uid: uniquey.create(),
@@ -116,34 +149,86 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
             passwordHash
           })
           .returningAll()
-          .execute()
+          .executeTakeFirstOrThrow()
 
         const token = tokenUniquey.create()
-        await db
-          .insertInto('accountValidationTokens')
-          .values({
-            token,
-            userId: user.id
-          })
-          .execute()
+        await trx.insertInto('accountValidationTokens').values({ token, userId: user.id }).execute()
 
-        await api.email.sendEmail({
-          to: form.email,
-          subject: 'Welcome to Social Stuffs! Please validate your account.',
-          template: 'account-validation-email',
-          data: {
-            username: user.username,
-            url: `${new URL(`/validate-account/${token}/${user.uid}`, config.baseLinkUrl).href}`
-          }
-        })
+        return { user, token }
+      })
 
+      // the account exists now, so a failed email send is non-fatal: log it and tell the user they can request a new link
+      try {
+        await sendValidationEmail(api, config, user, token)
         await flash.addFlash('success', 'Account created successfully. Please check your email to validate your account.')
-        return utils.redirect(c, '/sign-in')
       } catch (error) {
-        utils.logError(logger, error, 'Error creating user')
-        return c.html(SignUpForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }), 500)
+        utils.logError(logger, error, 'Error sending account validation email')
+        await flash.addFlash(
+          'info',
+          "Account created, but we couldn't send the validation email. You can request a new link from the sign-in page."
+        )
       }
+      return utils.redirect(c, '/sign-in')
+    } catch (error) {
+      utils.logError(logger, error, 'Error creating user')
+      return c.html(SignUpForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }), 500)
     }
+  })
+
+  app.get('/resend-validation', (c) => {
+    return c.render(ResendValidationPage(), {
+      title: 'Resend Validation',
+      description: 'Request a new account validation link.',
+      styles: ['auth']
+    })
+  })
+
+  const resendLimit = m.rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    keyPrefix: 'resend-validation',
+    onLimit: (c) => c.html(ResendValidationForm({ errors: { form: ['Too many attempts. Please try again later.'] } }))
+  })
+
+  app.post('/resend-validation', resendLimit, async (c) => {
+    const { db, logger, api, config, flash } = c.var
+    const formData = await c.req.formData()
+    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const email = form.email
+
+    // always respond identically so we never reveal whether an email maps to an account or its status
+    const neutral = async () => {
+      await flash.addFlash('info', "If that email matches a pending account, we've sent a new validation link.")
+      return utils.redirect(c, '/sign-in')
+    }
+
+    if (!email) return neutral()
+
+    try {
+      // Note: response is identical across match/no-match/active, but the match path is
+      // measurably slower (extra token insert + email send). Accepted: rate-limited, and only
+      // leaks "a pending account exists" — the same bit sign-up already exposes (audit F20).
+      const normalizedEmail = normalizeEmail(email)
+      const user = await db
+        .selectFrom('users')
+        .where('normalizedEmail', '=', normalizedEmail)
+        .where('status', '=', 'pending')
+        .selectAll()
+        .executeTakeFirst()
+
+      if (user) {
+        const token = tokenUniquey.create()
+        await db.insertInto('accountValidationTokens').values({ token, userId: user.id }).execute()
+        await sendValidationEmail(api, config, user, token)
+        logger.info({ userId: user.id }, 'Resent account validation email')
+      } else {
+        logger.info({ normalizedEmail }, 'Resend validation requested for unknown or non-pending email')
+      }
+    } catch (error) {
+      utils.logError(logger, error, 'Error resending account validation email')
+    }
+
+    return neutral()
   })
 
   const validateLimit = m.rateLimit({

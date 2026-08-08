@@ -33,13 +33,14 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
 
   app.post('/sign-in', signInLimit, async (c) => {
     const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as SignInData
-    const { data, errors } = utils.validateFormData<SignInData>(form, signInSchema)
+    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const result = utils.validateFormData<SignInData>(form, signInSchema)
 
-    if (Object.keys(errors).length > 0) {
-      logger.warn({ errors }, 'Validation errors on sign-in form')
-      return c.html(SignInForm({ ...data, errors }))
+    if (!result.success) {
+      logger.warn({ errors: result.errors }, 'Validation errors on sign-in form')
+      return c.html(SignInForm({ ...form, errors: result.errors }))
     } else {
+      const { data } = result
       const { db, logger, auth, flash } = c.var
 
       const normalizedEmail = normalizeEmail(data.email)
