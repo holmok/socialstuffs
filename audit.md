@@ -10,7 +10,8 @@
 - **P1 — all fixed:** F11, F32 (PR [#4](https://github.com/holmok/socialstuffs/pull/4)); F5 + F6 ([#6](https://github.com/holmok/socialstuffs/pull/6)), F8 ([#7](https://github.com/holmok/socialstuffs/pull/7)), F12 + F13 ([#9](https://github.com/holmok/socialstuffs/pull/9)), F7 + F20 ([#10](https://github.com/holmok/socialstuffs/pull/10)) — all merged.
 - **P2/P3 — fixed:** F18 + F19 (PR [#8](https://github.com/holmok/socialstuffs/pull/8)); F9 + F15 (+ F24 client/template caching still open) via [#15](https://github.com/holmok/socialstuffs/pull/15); F17 ([#13](https://github.com/holmok/socialstuffs/pull/13)); F25 ([#3](https://github.com/holmok/socialstuffs/pull/3) + [#14](https://github.com/holmok/socialstuffs/pull/14)); F28 partial (`claimed` fixed on both token tables via #3 + #5; `lastLogin`/`imageUrl` remain).
 - Phase 1 follow-ups (PR [#5](https://github.com/holmok/socialstuffs/pull/5)): local `typescript` dep, password-recovery `claimed` type, `NODE_ENV=test` support.
-- **Remaining:** Phase 4 (frontend/a11y: F10, F14, F16, F30, F31), Phase 5 (performance: F21–F24, F26, F33), Phase 6 (idioms/types: F27, F28-rest, F29, F34, F36), Phase 7 (tests). See [tasks.md](tasks.md).
+- **Phase 4 — fixed:** F10 + F30 + F31 (PR [#17](https://github.com/holmok/socialstuffs/pull/17)), F16 (PR [#18](https://github.com/holmok/socialstuffs/pull/18)), F14 (PR [#19](https://github.com/holmok/socialstuffs/pull/19)).
+- **Remaining:** Phase 5 (performance: F21–F24-rest, F26, F33), Phase 6 (idioms/types: F27, F28-rest, F29, F34, F36), Phase 7 (tests). See [tasks.md](tasks.md).
 
 See [tasks.md](tasks.md) for the live checklist.
 
@@ -118,7 +119,7 @@ User insert, token insert, and Postmark send run sequentially with no transactio
 
 **Fix:** Wrap both inserts in `db.transaction()`. Send the email after commit and treat email failure as non-fatal (log + flash directing the user to a resend path). Add a resend-validation endpoint.
 
-### F10. Auth forms have no non-JS fallback — a failed htmx load leaks passwords into URLs
+### F10. Auth forms have no non-JS fallback — a failed htmx load leaks passwords into URLs — ✅ Fixed (PR #17): native action/method fallback on all forms
 `templates/components/sign-in-form.tsx:11`, `templates/components/sign-up-form.tsx:14`
 
 Both forms have only `hx-post` — no `action`/`method`. If htmx fails to load (blocked script, flaky network, JS off), the browser falls back to **GET to the current URL**, putting `password=...` into the query string — browser history, server logs, Axiom. The server already handles non-HTMX POSTs correctly (`utils.redirect` branches on `HX-Request`), so only the markup is missing.
@@ -148,7 +149,7 @@ No CSP, `X-Frame-Options`/`frame-ancestors`, `X-Content-Type-Options`, `Referrer
 
 **Fix:** `app.use(secureHeaders({...}))` and `app.use(csrf())` before routes. A strict CSP is feasible since all JS is same-origin files; only the inline `<style>` needs `style-src 'unsafe-inline'` or a nonce.
 
-### F14. `/recover-password` is linked but does not exist
+### F14. `/recover-password` is linked but does not exist — ✅ Fixed (PR #19): full password-recovery flow implemented
 `templates/components/sign-in-form.tsx:45`
 
 The sign-in form advertises password recovery; no route serves it (only the `passwordRecoveryTokens` table type and email template exist). Every user who forgets their password hits the 404 page.
@@ -168,7 +169,7 @@ The sign-in form advertises password recovery; no route serves it (only the `pas
 
 **Fix:** Check `errors` first; only normalize and query on parse success, using `result.data` rather than the cast. Have `validateFormData` return the raw input typed honestly (`Partial<...>`), or replace the whole dance with `@hono/zod-validator` (see F27).
 
-### F16. HTMX error responses destroy the form and the user's input
+### F16. HTMX error responses destroy the form and the user's input — ✅ Fixed (PR #18): HX-Reswap:none + out-of-band flash
 `server/middleware/error-middleware.ts:12-13`, `templates/layouts/main-layout.tsx:28`
 
 The `htmx-config` meta makes all non-204 statuses swap, and forms use `hx-target="this" hx-swap="outerHTML"` — so any error reaching the global handler (middleware throw, body-parse failure, stale endpoint 404) replaces the entire form with a one-line `ErrorFragment` dead end, losing everything the user typed. (The sign-up route's own catch does this right — it re-renders the form; only the global path is wrong.)
@@ -268,14 +269,14 @@ Hono ships a Web-Crypto, zero-dep `hono/jwt` (`sign`/`verify`, async). The curre
 
 ### Frontend / accessibility
 
-### F30. No feedback for failed or in-flight requests
+### F30. No feedback for failed or in-flight requests — ✅ Fixed (PR #17): hx-indicator, hx-disabled-elt, and a transport-error listener
 Repo-wide (verified: zero `htmx:sendError`/`responseError`/`timeout` listeners; zero `hx-indicator`/`hx-disabled-elt`)
 
 Network-level failures (offline, server down) do nothing visible — button stays enabled, no message. Slow submits (bcrypt + Postmark) have no loading state and no double-submit protection; a second click fires another POST.
 
 **Fix:** A global `htmx:sendError` listener (in flash.js, injecting a flash-style error); `hx-disabled-elt="find button"` + `hx-indicator` on both forms with a `.htmx-request` style.
 
-### F31. Form accessibility gaps
+### F31. Form accessibility gaps — ✅ Fixed (PR #17): aria wiring, nav label, AA placeholder contrast
 `templates/components/text-input.tsx:26-48`, `templates/components/navigation.tsx:8-10`, `server/styles/css/form-style.ts:37-45`, `server/styles/_colors.ts:6,13`
 
 - Field errors render as a sibling `<ul>` with no `id`; inputs get no `aria-invalid`/`aria-describedby` — screen-reader users can't reach the error text; color is the only error signal (WCAG 1.4.1).
