@@ -12,22 +12,10 @@ type TextInputProps = {
 }
 
 const TextInput: FC<PropsWithChildren<TextInputProps>> = (props) => {
-  const {
-    id,
-    name,
-    label,
-    type = 'text',
-    value,
-    placeholder,
-    required = false,
-    errors
-  } = props
+  const { id, name, label, type = 'text', value, placeholder, required = false, errors } = props
   return (
     <div className="text-input">
-      <label
-        htmlFor={id}
-        className={errors && errors.length > 0 ? 'error' : undefined}
-      >
+      <label htmlFor={id} className={errors && errors.length > 0 ? 'error' : undefined}>
         {label}
       </label>
       <input

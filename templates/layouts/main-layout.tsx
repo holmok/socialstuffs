@@ -3,7 +3,6 @@ import Footer from '@components/footer'
 import Header from '@components/header'
 import getStyle, { type style } from '@styles/index'
 import type { FC, PropsWithChildren } from 'hono/jsx'
-import type { UserContext } from '@/middleware/auth-middleware'
 import type { Flashes } from '@/middleware/flash-middleware'
 
 interface LayoutProps {
@@ -12,11 +11,10 @@ interface LayoutProps {
   styles?: style[]
   flashes?: Flashes
   isAuthenticated: boolean
-  user?: UserContext | undefined
 }
 
 const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
-  const { children, title, description, styles, flashes, isAuthenticated, user } = props
+  const { children, title, description, styles, flashes, isAuthenticated } = props
   const styleList = new Set<style>(['reset', 'global', ...(styles || [])])
   const styleString = getStyle(Array.from(styleList))
   return (

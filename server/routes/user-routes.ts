@@ -18,7 +18,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
   user.get('/sign-out', async (c) => {
     const { auth, flash } = c.var
     await auth.signOut()
-    flash.addFlash('success', 'You have been signed out.')
+    await flash.addFlash('success', 'You have been signed out.')
     return c.redirect('/')
   })
 }
