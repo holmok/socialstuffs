@@ -26,7 +26,7 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <meta name="htmx-config" content={'{"responseHandling":[{"code":"204","swap":false},{"code":"...","swap":true}]}'} />
         <title>socialstuffs / {title}</title>
         <style dangerouslySetInnerHTML={{ __html: styleString }}></style>
-        <script src="/js/htmx.min.js" defer></script>
+        <script src="/js/htmx.min.2.0.10.js" defer></script>
         <script src="/js/nav.js" defer></script>
         <script src="/js/flash.js" defer></script>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
