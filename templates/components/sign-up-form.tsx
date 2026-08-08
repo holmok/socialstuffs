@@ -53,7 +53,6 @@ const SignUpForm = (props: SignUpFormProps) => {
         name="password"
         label="Password"
         type="password"
-        value={props.password}
         errors={props.errors?.password}
         placeholder="Enter a strong password..."
         required
@@ -63,7 +62,6 @@ const SignUpForm = (props: SignUpFormProps) => {
         name="confirmPassword"
         label="Confirm Password"
         type="password"
-        value={props.confirmPassword}
         errors={props.errors?.confirmPassword}
         placeholder="Confirm your password..."
         required
