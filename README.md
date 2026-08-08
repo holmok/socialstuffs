@@ -47,9 +47,10 @@ Checks:
 ```sh
 bun run typecheck   # tsc --noEmit
 bun run check       # biome lint + format check
+bun test            # bun:test — integration tests run against the dev database from .env
 ```
 
-There is no build step or test suite; Bun runs the TypeScript directly.
+There is no build step; Bun runs the TypeScript directly. Tests live next to the code they cover (e.g. `server/routes/sign-up-flow.test.ts`) and seed uniquely-suffixed rows they clean up afterward.
 
 ## Project layout
 
@@ -60,7 +61,7 @@ server/
   config.ts       # env validation (Zod)
   api/            # external service clients (Postmark email)
   data/           # Kysely table types + database instance
-  middleware/     # context, auth (signed JWT cookie), errors, static caching
+  middleware/     # context, auth (signed JWT cookie), session, flash, security headers, csrf, rate limiting, errors, static caching
   routes/         # route groups (pages + HTMX fragment endpoints)
   styles/         # CSS-in-TS, injected inline by the layout
 templates/
@@ -68,7 +69,7 @@ templates/
   pages/          # pages wrapped in a layout
   components/     # fragments used as HTMX swap responses
   email/          # HTML email templates
-static/           # favicons, htmx.min.js, nav.js
+static/           # favicons, htmx.min.js, nav.js, flash.js
 ```
 
 See [CLAUDE.md](CLAUDE.md) for a deeper architecture walkthrough.

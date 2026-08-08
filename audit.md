@@ -7,9 +7,10 @@
 
 **Resolution status (updated 2026-08-07):**
 - **P0 — all fixed and merged:** F1 (PR [#3](https://github.com/holmok/socialstuffs/pull/3)), F2 (PR [#1](https://github.com/holmok/socialstuffs/pull/1)), F3 + F4 (PR [#2](https://github.com/holmok/socialstuffs/pull/2)).
-- **P1 — all fixed** (merged Phase 1: F11, F32 via PR [#4](https://github.com/holmok/socialstuffs/pull/4); open Phase 2 PRs awaiting merge: F5 + F6 via [#6](https://github.com/holmok/socialstuffs/pull/6), F8 via [#7](https://github.com/holmok/socialstuffs/pull/7), F12 + F13 via [#9](https://github.com/holmok/socialstuffs/pull/9), F7 + F20 via [#10](https://github.com/holmok/socialstuffs/pull/10)).
-- **P2/P3 — fixed so far:** F18 + F19 (PR [#8](https://github.com/holmok/socialstuffs/pull/8)); partial: F25 (validate-account no longer logs tokens — email payload + `redact` remain), F28 (`claimed` fixed for both token tables via PRs #3 + #5; `lastLogin`/`imageUrl` remain).
+- **P1 — all fixed:** F11, F32 (PR [#4](https://github.com/holmok/socialstuffs/pull/4)); F5 + F6 ([#6](https://github.com/holmok/socialstuffs/pull/6)), F8 ([#7](https://github.com/holmok/socialstuffs/pull/7)), F12 + F13 ([#9](https://github.com/holmok/socialstuffs/pull/9)), F7 + F20 ([#10](https://github.com/holmok/socialstuffs/pull/10)) — all merged.
+- **P2/P3 — fixed:** F18 + F19 (PR [#8](https://github.com/holmok/socialstuffs/pull/8)); F9 + F15 (+ F24 client/template caching still open) via [#15](https://github.com/holmok/socialstuffs/pull/15); F17 ([#13](https://github.com/holmok/socialstuffs/pull/13)); F25 ([#3](https://github.com/holmok/socialstuffs/pull/3) + [#14](https://github.com/holmok/socialstuffs/pull/14)); F28 partial (`claimed` fixed on both token tables via #3 + #5; `lastLogin`/`imageUrl` remain).
 - Phase 1 follow-ups (PR [#5](https://github.com/holmok/socialstuffs/pull/5)): local `typescript` dep, password-recovery `claimed` type, `NODE_ENV=test` support.
+- **Remaining:** Phase 4 (frontend/a11y: F10, F14, F16, F30, F31), Phase 5 (performance: F21–F24, F26, F33), Phase 6 (idioms/types: F27, F28-rest, F29, F34, F36), Phase 7 (tests). See [tasks.md](tasks.md).
 
 See [tasks.md](tasks.md) for the live checklist.
 
@@ -110,7 +111,7 @@ All three `setSignedCookie` calls set `httpOnly: true, sameSite: 'strict'` but n
 
 **Fix:** `new Uniquey({ length: 32 })` for tokens and session ids — or `crypto.randomBytes(32).toString('base64url')`. **Do this before building password recovery on the same primitives.**
 
-### F9. Sign-up's multi-step write is not transactional and has no recovery path
+### F9. Sign-up's multi-step write is not transactional and has no recovery path — ✅ Fixed (PR #15): transactional inserts, non-fatal email, and a resend-validation endpoint
 `server/routes/sign-up-routes.ts:97-127`
 
 User insert, token insert, and Postmark send run sequentially with no transaction. If the token insert or email send fails after the user insert, the catch shows "unexpected error" — but the user row exists. Retrying yields "Email is already in use," and there is no resend-validation route: the account is permanently stuck in `pending` (currently masked only by F4 letting pending users sign in). The sign-up response also blocks on the full Postmark round trip (commonly 200-800 ms) on top of bcrypt.
@@ -160,7 +161,7 @@ The sign-in form advertises password recovery; no route serves it (only the `pas
 
 ### Correctness
 
-### F15. Crafted sign-up POST yields a 500; `validateFormData` lies about its types
+### F15. Crafted sign-up POST yields a 500; `validateFormData` lies about its types — ✅ Fixed (PR #15): validate-first + discriminated-union return type
 `server/routes/sign-up-routes.ts:65-66`, `server/utils.ts:77-93`
 
 `normalizeEmail(data.email)` and `data.username.toLowerCase()` run before the validation-error check, on the **raw** form data cast `as SignUpData` (utils.ts:90 returns unvalidated input as `T`). A POST missing `email` or `username` (curl, broken client) throws `TypeError` → 500 error page instead of the form with errors. The duplicate-user DB query (lines 69-73) also runs even when field validation already failed. Related: `err.path[0]` is `undefined` for root-level Zod refine issues, producing an unreadable `"undefined"` error key (latent — current schemas always set `path`).
@@ -174,7 +175,7 @@ The `htmx-config` meta makes all non-204 statuses swap, and forms use `hx-target
 
 **Fix:** Have the error handler send `HX-Reswap: none` and deliver the error as an out-of-band flash, or standardize on re-rendering the form.
 
-### F17. Submitted passwords are echoed back into response HTML
+### F17. Submitted passwords are echoed back into response HTML — ✅ Fixed (PR #13): password `value` bindings removed from both forms
 `templates/components/sign-in-form.tsx:35`, `templates/components/sign-up-form.tsx:56,66`, via `text-input.tsx:37`
 
 On validation failure the forms re-render with `value={props.password}` — cleartext password in the response body (DOM, history, proxies; the response is also compressed and carries no `Cache-Control: no-store`).
@@ -225,14 +226,14 @@ Expired rows are deleted only if that exact key is read again. Every abandoned s
 
 **Fix:** Commit `.gz`/`.br` siblings and use `serveStatic({ root: './static', precompressed: true })` (supported by this Hono version); add `hono/etag` ahead of it; either version the filenames + `immutable`, or drop the TTL to something honest.
 
-### F24. Email sending: client and template re-created per send; response blocks on Postmark
+### F24. Email sending: client and template re-created per send; response blocks on Postmark — ⚠️ Partially fixed (PR #15): send moved after commit + non-fatal, so it no longer blocks the response into a 500; client/template still re-created per send (Phase 5, task 5.4)
 `server/api/email-api.ts:42,47`, `server/routes/sign-up-routes.ts:119`
 
 `sendEmail` constructs a new `Postmark.ServerClient` and re-reads the template file from disk on every call. Sign-up latency = bcrypt + 2 inserts + a cross-internet Postmark round trip; a Postmark outage turns sign-ups into 500s after the user row committed (F9).
 
 **Fix:** Construct the client once in the `EmailAPI` constructor; cache template text in the existing `templates` map. Send after responding, or treat failure as non-fatal per F9.
 
-### F25. Secrets and PII flow into logs (shipped to Axiom in prod); no `redact` configured — ⚠️ partially fixed (PR #3 removed tokens from validate-account logs; email payload + `redact` remain)
+### F25. Secrets and PII flow into logs (shipped to Axiom in prod); no `redact` configured — ✅ Fixed (PR #3 removed validate-account token logs; PR #14 dropped the email payload and added a pino `redact` config with a route-preserving `url` censor)
 `server/routes/sign-up-routes.ts:160-171`, `server/routes/sign-in-routes.ts:40`, `server/api/email-api.ts:40`, `server/config.ts:49-73`
 
 The `/validate-account` failure paths log the raw token at `warn` — the line-160 path fires while the token is still **valid and unclaimed**, so live secrets land in logs. Sign-in failures log the attempted email. `email-api.ts:40` debug-logs the full email payload including the validation URL. Neither pino config sets `redact`.
