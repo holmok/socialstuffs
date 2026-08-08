@@ -20,6 +20,7 @@ const PASSWORD = 'SignIn99!ok'
 type SeededUser = { id: number; uid: string; email: string; username: string }
 
 async function seedUser(name: string, status: UserStatus): Promise<SeededUser> {
+  // keep seed names short: username max is 15 chars, so `u${name}` must leave room for the full 8-char random suffix
   const username = `u${name}${suffix}`.slice(0, 15)
   const email = `${name}-${suffix}@example.com`
   const passwordHash = await Bun.password.hash(PASSWORD, { algorithm: 'bcrypt', cost: 10 })
@@ -80,7 +81,7 @@ afterAll(async () => {
 
 describe('POST /sign-in', () => {
   test('active user with the correct password signs in: redirect, signed cookie, correct JWT claims and ~7-day exp', async () => {
-    const user = await seedUser('signinok', 'active')
+    const user = await seedUser('ok', 'active')
     const res = await post('/sign-in', { email: user.email, password: PASSWORD })
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/user')
@@ -103,7 +104,7 @@ describe('POST /sign-in', () => {
   })
 
   test('pending user is told to validate their email and gets no auth cookie', async () => {
-    const user = await seedUser('signinpending', 'pending')
+    const user = await seedUser('pend', 'pending')
     const res = await post('/sign-in', { email: user.email, password: PASSWORD })
     expect(res.status).toBe(200)
     const body = await res.text()
@@ -112,7 +113,7 @@ describe('POST /sign-in', () => {
   })
 
   test('deleted user gets the same generic error as bad credentials (no status leak)', async () => {
-    const user = await seedUser('signindeleted', 'deleted')
+    const user = await seedUser('del', 'deleted')
     const res = await post('/sign-in', { email: user.email, password: PASSWORD })
     expect(res.status).toBe(200)
     const body = await res.text()
@@ -122,7 +123,7 @@ describe('POST /sign-in', () => {
   })
 
   test('inactive user gets the same generic error as bad credentials (no status leak)', async () => {
-    const user = await seedUser('signininactive', 'inactive')
+    const user = await seedUser('inact', 'inactive')
     const res = await post('/sign-in', { email: user.email, password: PASSWORD })
     expect(res.status).toBe(200)
     const body = await res.text()
@@ -132,7 +133,7 @@ describe('POST /sign-in', () => {
   })
 
   test('wrong password for an active user gets the generic error and no auth cookie', async () => {
-    const user = await seedUser('signinbadpw', 'active')
+    const user = await seedUser('badpw', 'active')
     const res = await post('/sign-in', { email: user.email, password: 'Wrong99!pass' })
     expect(res.status).toBe(200)
     const body = await res.text()
