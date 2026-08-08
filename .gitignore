@@ -1,3 +1,6 @@
 # deps
 node_modules/
 .env
+
+# test coverage output
+coverage/
