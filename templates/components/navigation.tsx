@@ -28,7 +28,9 @@ const Navigation = (props: NavigationProps) => {
               <a href="/user">User</a>
             </li>
             <li>
-              <a href="/user/sign-out">Sign out</a>
+              <form method="post" action="/user/sign-out">
+                <button type="submit">Sign out</button>
+              </form>
             </li>
           </>
         )}

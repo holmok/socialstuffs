@@ -170,6 +170,16 @@ export default {
   'nav a:hover': {
     color: colors.accentBlue
   },
+  'nav ul button': {
+    backgroundColor: 'transparent',
+    color: colors.fgMain,
+    padding: '0',
+    borderRadius: '0'
+  },
+  'nav ul button:hover': {
+    backgroundColor: 'transparent',
+    color: colors.accentBlue
+  },
   '.nav-toggle': {
     display: 'none',
     backgroundColor: 'transparent',
@@ -208,6 +218,15 @@ export default {
       textDecoration: 'none'
     },
     'nav a:hover': {
+      backgroundColor: colors.bgSurface
+    },
+    'nav ul button': {
+      display: 'block',
+      width: '100%',
+      padding: `${vars.spacingSmall} ${vars.spacingMain}`,
+      textAlign: 'center'
+    },
+    'nav ul button:hover': {
       backgroundColor: colors.bgSurface
     }
   }

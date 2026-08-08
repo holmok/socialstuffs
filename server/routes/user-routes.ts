@@ -2,6 +2,7 @@ import UserPage from '@pages/user'
 import type { Hono } from 'hono'
 import type { Logger } from 'pino'
 import * as m from '@/middleware'
+import * as utils from '@/utils'
 
 export default function UserRoutes(app: Hono, logger: Logger) {
   logger.info('Registering user routes')
@@ -15,10 +16,10 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     })
   })
 
-  user.get('/sign-out', async (c) => {
+  user.post('/sign-out', async (c) => {
     const { auth, flash } = c.var
     await auth.signOut()
     await flash.addFlash('success', 'You have been signed out.')
-    return c.redirect('/')
+    return utils.redirect(c, '/')
   })
 }
