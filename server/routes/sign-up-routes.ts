@@ -39,28 +39,10 @@ async function sendValidationEmail(
 
 const signUpSchema = z
   .object({
-    username: z
-      .string()
-      .min(1, 'Username is required.')
-      .max(15, 'Username must be at most 15 characters long.')
-      .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores.')
-      .regex(/^[^_]/, 'Username cannot start with an underscore.')
-      .regex(/[^_]$/, 'Username cannot end with an underscore.')
-      .regex(/^[^0-9]/, 'Username cannot start with a number.'),
-    email: z
-      .email({ error: 'Invalid email address' })
-      .min(1, 'Email is required.')
-      .max(255, 'Email must be at most 255 characters long.'),
+    username: utils.usernameSchema,
+    email: utils.emailSchema,
     confirmEmail: z.string().min(1, 'Confirm Email is required.'),
-    password: z
-      .string()
-      .min(10, 'Password must be at least 10 characters long.')
-      .max(255, 'Password must be at most 255 characters long.')
-      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
-      .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
-      .regex(/[0-9]/, 'Password must contain at least one number.')
-      .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character.')
-      .regex(/^[^\s]*$/, 'Password must not contain spaces.'),
+    password: utils.passwordSchema,
     confirmPassword: z.string().min(1, 'Confirm Password is required.')
   })
   .refine((data) => data.email === data.confirmEmail, {

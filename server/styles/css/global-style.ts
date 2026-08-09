@@ -138,17 +138,15 @@ export default {
     borderBottom: delimiterBorder,
     zIndex: '1'
   },
-  '@supports (backdrop-filter: blur(10px))': {
-    header: {
-      backgroundColor: colors.bgHeaderGlass,
-      backdropFilter: 'blur(10px)',
-      WebkitBackdropFilter: 'blur(10px)'
-    }
-  },
   footer: {
     height: vars.footerHeight,
+    backgroundColor: colors.bgMain,
     borderTop: delimiterBorder,
-    flexShrink: '0'
+    zIndex: '1',
+    position: 'fixed',
+    bottom: '0',
+    left: '0',
+    right: '0'
   },
   '.header-inner, .footer-inner': {
     maxWidth: vars.maxWidthMain,
@@ -232,7 +230,8 @@ export default {
     },
     'nav ul.open': {
       display: 'flex',
-      borderTop: delimiterBorder
+      borderTop: delimiterBorder,
+      zIndex: '1'
     },
     'nav a': {
       display: 'block',

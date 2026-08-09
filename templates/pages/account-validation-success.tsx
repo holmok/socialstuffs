@@ -1,9 +1,9 @@
 const AccountValidationSuccessPage = () => {
   return (
     <>
-      <h1>Your account has been validated successfully.</h1>
+      <h1>Your email has been verified.</h1>
       <p>
-        Great! Welcome!! You can now <a href="/sign-in">sign in</a>. Enjoy your experience on Social Stuffs!
+        You're all set. You can now <a href="/sign-in">sign in</a> and enjoy Social Stuffs!
       </p>
     </>
   )

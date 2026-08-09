@@ -84,6 +84,31 @@ export type ValidateFormResult<T> =
   | { success: true; data: T; errors: Partial<Record<keyof T, string[]>> }
   | { success: false; data: Record<string, unknown>; errors: Partial<Record<keyof T, string[]>> }
 
+// shared field rules so sign-up and settings enforce the same username/email constraints
+export const usernameSchema = z
+  .string()
+  .min(1, 'Username is required.')
+  .max(15, 'Username must be at most 15 characters long.')
+  .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores.')
+  .regex(/^[^_]/, 'Username cannot start with an underscore.')
+  .regex(/[^_]$/, 'Username cannot end with an underscore.')
+  .regex(/^[^0-9]/, 'Username cannot start with a number.')
+
+export const emailSchema = z
+  .email({ error: 'Invalid email address' })
+  .min(1, 'Email is required.')
+  .max(255, 'Email must be at most 255 characters long.')
+
+export const passwordSchema = z
+  .string()
+  .min(10, 'Password must be at least 10 characters long.')
+  .max(255, 'Password must be at most 255 characters long.')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
+  .regex(/[0-9]/, 'Password must contain at least one number.')
+  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character.')
+  .regex(/^[^\s]*$/, 'Password must not contain spaces.')
+
 export function validateFormData<T>(data: Record<string, unknown>, schema: z.ZodType<T>): ValidateFormResult<T> {
   const result = schema.safeParse(data)
   if (!result.success) {

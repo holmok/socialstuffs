@@ -1,5 +1,5 @@
 export const bgMain = '#141821'
-export const bgHeaderGlass = 'rgba(20, 24, 33, 0.85)'
+export const bgHeaderGlass = 'rgba(20, 24, 33, 0.75)'
 export const bgSurfaceLight = '#3d4656'
 export const bgSurface = '#242a35'
 export const fgMain = '#e2e5ea'

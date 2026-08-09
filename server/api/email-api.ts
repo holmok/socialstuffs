@@ -4,7 +4,11 @@ import Postmark, { type Message } from 'postmark'
 import type { Config } from '@/config'
 import { logError } from '@/utils'
 
-type EmailTemplate = 'account-validation-email' | 'password-recovery-email'
+type EmailTemplate =
+  | 'account-validation-email'
+  | 'password-recovery-email'
+  | 'email-change-validation-email'
+  | 'email-change-notice-email'
 
 export type SendEmailOptions = {
   to: string
@@ -27,6 +31,11 @@ export default class EmailAPI {
     this.client = new Postmark.ServerClient(config.email.postmarkToken)
     this.templatePaths['account-validation-email'] = Path.join(process.cwd(), 'templates/email/account-validation-email.html')
     this.templatePaths['password-recovery-email'] = Path.join(process.cwd(), 'templates/email/password-recovery-email.html')
+    this.templatePaths['email-change-validation-email'] = Path.join(
+      process.cwd(),
+      'templates/email/email-change-validation-email.html'
+    )
+    this.templatePaths['email-change-notice-email'] = Path.join(process.cwd(), 'templates/email/email-change-notice-email.html')
   }
 
   private async loadTemplate(template: EmailTemplate): Promise<string> {
