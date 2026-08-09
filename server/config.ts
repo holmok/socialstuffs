@@ -20,6 +20,7 @@ export const envSchema = z.object({
   FROM_EMAIL: z.email(),
   BASE_LINK_URL: z.url().default('http://localhost:3000'),
   BASE_IMAGE_URL: z.url().default('https://storage.googleapis.com/social-stuffs-images'),
+  IMAGE_BUCKET: z.string().min(1),
   JWT_SECRET: z.string().min(1),
   COOKIE_SECRET: z.string().min(1),
   COOKIE_NAME_USER: z.string().min(1),
@@ -115,6 +116,7 @@ export default function LoadConfig() {
     },
     baseLinkUrl: env.BASE_LINK_URL,
     baseImageUrl: env.BASE_IMAGE_URL,
+    imageBucket: env.IMAGE_BUCKET,
     email: {
       postmarkToken: env.POSTMARK_TOKEN,
       fromEmail: env.FROM_EMAIL

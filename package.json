@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@axiomhq/pino": "^1.8.0",
+    "@google-cloud/storage": "^7.21.0",
+    "@google-cloud/vision": "^5.3.7",
     "csstype": "^3.2.3",
     "hono": "^4.12.33",
     "hono-pino": "^0.10.3",
+    "jimp": "^1.6.1",
     "kysely": "^0.29.4",
     "normalize-email": "^1.1.1",
     "pg": "^8.22.0",
