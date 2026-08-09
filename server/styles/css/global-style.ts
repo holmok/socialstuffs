@@ -21,7 +21,8 @@ export default {
     minHeight: '100dvh',
     display: 'flex',
     flexDirection: 'column',
-    paddingTop: vars.headerHeight
+    paddingTop: vars.headerHeight,
+    paddingBottom: vars.footerHeight
   },
   main: {
     width: '100%',

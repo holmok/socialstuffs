@@ -4,6 +4,16 @@ export type UserStatus = 'pending' | 'active' | 'deleted' | 'inactive'
 export type UserRole = 'user' | 'admin' | 'owner'
 export type UserMeta = Record<string, unknown>
 
+// shape of the profile fields stored in the users.info JSON column
+export type UserProfileInfo = {
+  fullname?: string
+  title?: string
+  location?: string
+  bio?: string
+  profileImageUrl?: string
+  lastExportUrl?: string
+}
+
 export type UserTable = {
   id: Generated<number>
   uid: ColumnType<string, string, never>

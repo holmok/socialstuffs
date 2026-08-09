@@ -31,7 +31,7 @@ export function createApp(config: Config, logger: Logger) {
   logger.info('Creating Hono app')
 
   const db = data(config.poolConfig, config.dbSchema, logger)
-  const api = new API(logger, config)
+  const api = new API(db, logger, config)
   const app = new Hono()
 
   app.use(m.configContext(config))
@@ -45,7 +45,8 @@ export function createApp(config: Config, logger: Logger) {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:'],
+        // the image bucket origin for stored profile photos; blob: for the client-side upload preview
+        imgSrc: ["'self'", 'data:', 'blob:', new URL(config.baseImageUrl).origin],
         frameAncestors: ["'none'"]
       },
       xFrameOptions: 'DENY'

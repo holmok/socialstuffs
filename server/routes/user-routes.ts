@@ -1,8 +1,11 @@
-import type { UserStatus } from '@data/user-data'
+import { ImageUploadError } from '@api/image-api'
+import { UserDataError } from '@api/user-data-api'
+import type { UserProfileInfo, UserStatus } from '@data/user-data'
 import UserDataPage from '@pages/user/data'
 import EditProfilePage from '@pages/user/edit-profile'
 import MyProfilePage from '@pages/user/my-profile'
 import UserSettingsPage from '@pages/user/settings'
+import EditProfileForm from '@templates/components/user/edit-profile-form'
 import UserSettingsForm from '@templates/components/user/settings-form'
 import type { Hono } from 'hono'
 import normalizeEmail from 'normalize-email'
@@ -29,13 +32,41 @@ const settingsSchema = z
 
 type SettingsData = z.infer<typeof settingsSchema>
 
+const profileSchema = z.object({
+  fullname: z.string().trim().max(100, 'Full name must be at most 100 characters long.').optional(),
+  title: z.string().trim().max(100, 'Title must be at most 100 characters long.').optional(),
+  location: z.string().trim().max(100, 'Location must be at most 100 characters long.').optional(),
+  bio: z.string().trim().max(1000, 'Bio must be at most 1000 characters long.').optional()
+})
+
+type ProfileData = z.infer<typeof profileSchema>
+
+const profileTextFields = ['fullname', 'title', 'location', 'bio'] as const
+
+// each upload gets a fresh filename (old ones are removed via removePrefix) so cached URLs never go stale
+const imageUniquey = new Uniquey({ length: 8 })
+
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024
+// formats Jimp can decode; keep in sync with the accept attribute and hint in the edit-profile form
+const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif']
+
+// users without an uploaded photo get the shared placeholder image from the bucket
+function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
+  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
+  return info.profileImageUrl ?? new URL('profile.jpg', base).href
+}
+
 export default function UserRoutes(app: Hono, logger: Logger) {
   logger.info('Registering user routes')
   const user = app.basePath('/user')
   user.use('*', m.authorize({ requireAuth: true }))
 
   user.get('/', async (c) => {
-    return c.render(MyProfilePage(), {
+    const dbUser = await c.var.auth.getUser()
+    if (dbUser == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+    const info = (dbUser.info ?? {}) as UserProfileInfo
+    info.profileImageUrl = displayImageUrl(info, c.var.config.baseImageUrl)
+    return c.render(MyProfilePage({ username: dbUser.username, created: dbUser.created, info }), {
       title: 'My Profile',
       description: 'This is my profile page.',
       styles: ['user']
@@ -43,11 +74,114 @@ export default function UserRoutes(app: Hono, logger: Logger) {
   })
 
   user.get('/edit-profile', async (c) => {
-    return c.render(EditProfilePage(), {
+    const dbUser = await c.var.auth.getUser()
+    const info = (dbUser?.info ?? {}) as UserProfileInfo
+    info.profileImageUrl = displayImageUrl(info, c.var.config.baseImageUrl)
+    return c.render(EditProfilePage({ info }), {
       title: 'Edit Profile',
       description: 'This is the edit profile page.',
-      styles: ['user']
+      styles: ['user', 'auth']
     })
+  })
+
+  user.post('/edit-profile', async (c) => {
+    const { logger, flash, auth, db, api, config } = c.var
+    const formData = await c.req.formData()
+    const form: Record<string, string> = {}
+    for (const field of profileTextFields) {
+      const value = formData.get(field)
+      if (typeof value === 'string') form[field] = value
+    }
+
+    const user = await auth.getUser()
+    if (user == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+    const currentInfo = user.info as UserProfileInfo
+    const currentImageUrl = displayImageUrl(currentInfo, config.baseImageUrl)
+
+    const result = utils.validateFormData<ProfileData>(form, profileSchema)
+    if (!result.success) {
+      logger.warn({ errors: result.errors }, 'Validation errors on edit profile form')
+      return c.html(EditProfileForm({ ...form, profileImageUrl: currentImageUrl, errors: result.errors }))
+    }
+    const { data } = result
+
+    // moderate every non-empty text field; a flagged field blocks the save with an error on that field.
+    // a moderation outage fails closed (form-level error) rather than letting unchecked text through
+    try {
+      const flagged = await Promise.all(
+        profileTextFields
+          .filter((field) => data[field])
+          .map(async (field) => [field, await api.language.getContentFlags(data[field] as string)] as const)
+      )
+      const errors: Record<string, string[]> = {}
+      for (const [field, flags] of flagged) {
+        if (flags.length > 0) errors[field] = ['This text appears to contain inappropriate content.']
+      }
+      if (Object.keys(errors).length > 0) {
+        logger.warn({ uid: user.uid, fields: Object.keys(errors) }, 'Profile text flagged by moderation')
+        return c.html(EditProfileForm({ ...data, profileImageUrl: currentImageUrl, errors }))
+      }
+    } catch (error) {
+      utils.logError(logger, error, 'Error moderating profile text')
+      return c.html(
+        EditProfileForm({
+          ...data,
+          profileImageUrl: currentImageUrl,
+          errors: { form: ["We couldn't check your text right now. Please try again."] }
+        })
+      )
+    }
+
+    const image = formData.get('image')
+    let profileImageUrl: string | undefined
+    if (image instanceof File && image.size > 0) {
+      if (image.size > MAX_IMAGE_BYTES) {
+        return c.html(
+          EditProfileForm({
+            ...data,
+            profileImageUrl: currentImageUrl,
+            errors: { image: ['Image is too large. The maximum size is 20MB.'] }
+          })
+        )
+      }
+      if (!allowedImageTypes.includes(image.type)) {
+        return c.html(
+          EditProfileForm({
+            ...data,
+            profileImageUrl: currentImageUrl,
+            errors: { image: ['Image must be a JPEG, PNG, or GIF.'] }
+          })
+        )
+      }
+      try {
+        profileImageUrl = await api.images.uploadImage({
+          userUid: user.uid,
+          buffer: Buffer.from(await image.arrayBuffer()),
+          filename: `profile-${imageUniquey.create()}`,
+          mimetype: 'image/jpeg',
+          maxDimension: 512,
+          removePrefix: 'profile'
+        })
+      } catch (error) {
+        const errors =
+          error instanceof ImageUploadError ? error.errors : { image: ["We couldn't upload your image. Please try again."] }
+        return c.html(EditProfileForm({ ...data, profileImageUrl: currentImageUrl, errors }))
+      }
+    }
+
+    const info: UserProfileInfo = {
+      ...currentInfo,
+      fullname: data.fullname || undefined,
+      title: data.title || undefined,
+      location: data.location || undefined,
+      bio: data.bio || undefined,
+      profileImageUrl: profileImageUrl ?? currentInfo.profileImageUrl
+    }
+    await db.updateTable('users').set({ info }).where('id', '=', user.id).execute()
+
+    logger.info({ uid: user.uid }, 'Profile updated')
+    await flash.addFlash('info', 'Profile updated.')
+    return utils.redirect(c, '/user/edit-profile')
   })
 
   user.get('/settings', async (c) => {
@@ -206,11 +340,64 @@ export default function UserRoutes(app: Hono, logger: Logger) {
   })
 
   user.get('/data', async (c) => {
-    return c.render(UserDataPage(), {
+    const dbUser = await c.var.auth.getUser()
+    const info = (dbUser?.info ?? {}) as UserProfileInfo
+    return c.render(UserDataPage({ lastExportUrl: info.lastExportUrl }), {
       title: 'My Data',
       description: 'This is my data page.',
       styles: ['user']
     })
+  })
+
+  user.post('/data/export', async (c) => {
+    const { logger, flash, auth, db, api } = c.var
+    const user = await auth.getUser()
+    if (user == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+
+    try {
+      const url = await api.userData.downloadUserData(user.uid)
+      const info: UserProfileInfo = { ...(user.info as UserProfileInfo), lastExportUrl: url }
+      await db.updateTable('users').set({ info }).where('id', '=', user.id).execute()
+      logger.info({ uid: user.uid }, 'User data export generated')
+      await flash.addFlash('success', 'Your data export is ready — the download link is below.')
+    } catch (error) {
+      if (error instanceof UserDataError) {
+        await flash.addFlash('error', error.message)
+      } else {
+        utils.logError(logger, error, 'Error generating user data export')
+        await flash.addFlash('error', 'Something went wrong exporting your data. Please try again.')
+      }
+    }
+    return utils.redirect(c, '/user/data')
+  })
+
+  user.post('/data/delete', async (c) => {
+    const { logger, flash, auth, api } = c.var
+    const user = await auth.getUser()
+    if (user == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+
+    // the modal gates this client-side, but the word is re-checked here so a bare POST can't delete an account
+    const formData = await c.req.formData()
+    const confirm = String(formData.get('confirm') ?? '')
+      .trim()
+      .toLowerCase()
+    if (confirm !== 'delete') {
+      await flash.addFlash('error', 'Please type "delete" to confirm deleting your account.')
+      return utils.redirect(c, '/user/data')
+    }
+
+    try {
+      await api.userData.deleteUserData(user.uid)
+    } catch (error) {
+      utils.logError(logger, error, 'Error deleting user account')
+      await flash.addFlash('error', 'Something went wrong deleting your account. Please try again.')
+      return utils.redirect(c, '/user/data')
+    }
+
+    logger.info({ uid: user.uid }, 'User account deleted')
+    await auth.signOut()
+    await flash.addFlash('info', 'Your account and all of your data have been deleted.')
+    return utils.redirect(c, '/')
   })
 
   user.post('/sign-out', async (c) => {

@@ -27,6 +27,17 @@ export const envSchema = z.object({
   COOKIE_NAME_SESSION: z.string().min(1)
 })
 
+const languageThresholds = {
+  Derogatory: 0.7, // Hate speech targeting identity
+  Violent: 0.65, // Gore or physical threats
+  'Death, Harm & Tragedy': 0.7, // Self-harm, mocking tragedies
+  Toxic: 0.85, // Rude/unreasonable (High bar to allow venting)
+  Insult: 0.6, // Inflammatory towards individuals
+  Sexual: 0.7, // Lewd/NSFW content
+  'Illicit Drugs': 0.8, // Sourcing/dealing (high threshold to allow medical/casual talk)
+  Profanity: 0.92
+}
+
 export type Config = ReturnType<typeof LoadConfig>
 
 export default function LoadConfig() {
@@ -137,6 +148,7 @@ export default function LoadConfig() {
       isProd: env.NODE_ENV === 'production',
       env: env.NODE_ENV
     },
-    pino: env.NODE_ENV === 'development' ? devPinoOptions : productionPinoOptions
+    pino: env.NODE_ENV === 'development' ? devPinoOptions : productionPinoOptions,
+    languageThresholds
   }
 }

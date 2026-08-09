@@ -1,5 +1,9 @@
 import { afterAll, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import EmailAPI from '@api/email-api'
+import ImagesAPI, { ImageUploadError } from '@api/image-api'
+import LanguageAPI from '@api/language-api'
+import UserDataAPI, { UserDataError } from '@api/user-data-api'
+import type { UserProfileInfo } from '@data/user-data'
 import { Hono } from 'hono'
 import { getSignedCookie } from 'hono/cookie'
 import { verify } from 'hono/jwt'
@@ -19,6 +23,14 @@ const PASSWORD = 'Settings99!ok'
 
 // stub Postmark so no real emails are sent; also lets us assert what was sent
 const emailSpy = spyOn(EmailAPI.prototype, 'sendEmail').mockResolvedValue(undefined)
+
+// stub the Google-backed APIs so no credentials or network are ever touched
+const UPLOADED_URL = 'https://img.example.com/u/profile-test.jpg'
+const languageSpy = spyOn(LanguageAPI.prototype, 'getContentFlags').mockResolvedValue([])
+const uploadSpy = spyOn(ImagesAPI.prototype, 'uploadImage').mockResolvedValue(UPLOADED_URL)
+const EXPORT_URL = 'https://img.example.com/user_data/dt=2026-08-09/test_data.zip'
+const exportSpy = spyOn(UserDataAPI.prototype, 'downloadUserData').mockResolvedValue(EXPORT_URL)
+const deleteSpy = spyOn(UserDataAPI.prototype, 'deleteUserData').mockResolvedValue(undefined)
 
 type SeededUser = { id: number; uid: string; email: string; username: string }
 
@@ -61,6 +73,21 @@ function post(path: string, fields: Record<string, string>, cookie?: string) {
   })
 }
 
+function postMultipart(path: string, fields: Record<string, string | File>, cookie?: string) {
+  ipCounter += 1
+  const body = new FormData()
+  for (const [key, value] of Object.entries(fields)) body.append(key, value)
+  return app.request(`http://localhost${path}`, {
+    method: 'POST',
+    headers: {
+      Origin: 'http://localhost',
+      'X-Forwarded-For': `10.3.1.${ipCounter}`,
+      ...(cookie ? { cookie } : {})
+    },
+    body
+  })
+}
+
 function get(path: string, cookie?: string, headers: Record<string, string> = {}) {
   return app.request(`http://localhost${path}`, { headers: { ...(cookie ? { cookie } : {}), ...headers } })
 }
@@ -98,6 +125,10 @@ function settingsFields(user: { username: string; email: string }, overrides: Re
 
 beforeEach(() => {
   __resetRateLimits()
+  languageSpy.mockClear()
+  uploadSpy.mockClear()
+  exportSpy.mockClear()
+  deleteSpy.mockClear()
 })
 
 afterAll(async () => {
@@ -109,6 +140,10 @@ afterAll(async () => {
   }
   await db.deleteFrom('kvStorage').where('key', 'like', `sign-in-acct:%${suffix}%`).execute()
   emailSpy.mockRestore()
+  languageSpy.mockRestore()
+  uploadSpy.mockRestore()
+  exportSpy.mockRestore()
+  deleteSpy.mockRestore()
   await db.destroy()
 })
 
@@ -133,11 +168,38 @@ describe('auth gating on /user', () => {
 })
 
 describe('GET /user pages', () => {
-  test('/user renders the profile page for a signed-in user', async () => {
+  test('/user renders the profile card with stored info and the edit link', async () => {
     const user = await seedUser('prof')
+    await db
+      .updateTable('users')
+      .set({ info: { fullname: 'Pat Profile', title: 'Tester', location: 'Denver', bio: 'Hello there.' } })
+      .where('id', '=', user.id)
+      .execute()
+    const cookie = await signIn(user)
+
+    const res = await get('/user', cookie)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Pat Profile')
+    expect(body).toContain(`@${user.username}`)
+    expect(body).toContain('Tester · Denver')
+    expect(body).toContain('Hello there.')
+    expect(body).toContain('Member since')
+    expect(body).toContain('href="/user/edit-profile"')
+    // no uploaded photo: avatar falls back to the shared placeholder
+    expect(body).toContain('profile.jpg')
+  })
+
+  test('/user with no profile info falls back to the username and skips empty sections', async () => {
+    const user = await seedUser('bare')
     const cookie = await signIn(user)
     const res = await get('/user', cookie)
     expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain(`@${user.username}`)
+    // the CSS class names always appear in the inline <style>; assert on the rendered elements
+    expect(body).not.toContain('class="profile-meta"')
+    expect(body).not.toContain('class="profile-bio"')
   })
 
   test('/user/settings pre-fills the current username and email', async () => {
@@ -339,6 +401,268 @@ describe('POST /user/settings — email change', () => {
 
     const tokens = await db.selectFrom('accountValidationTokens').select(['id']).where('userId', '=', user.id).execute()
     expect(tokens.length).toBe(1)
+  })
+})
+
+async function profileInfo(userId: number): Promise<UserProfileInfo> {
+  const row = await db.selectFrom('users').select(['info']).where('id', '=', userId).executeTakeFirstOrThrow()
+  return row.info as UserProfileInfo
+}
+
+const PROFILE_FIELDS = { fullname: 'Chris Example', title: 'Builder', location: 'Portland', bio: 'I make things.' }
+
+describe('GET /user/edit-profile', () => {
+  test('pre-fills the stored profile info', async () => {
+    const user = await seedUser('epget')
+    await db.updateTable('users').set({ info: PROFILE_FIELDS }).where('id', '=', user.id).execute()
+    const cookie = await signIn(user)
+
+    const res = await get('/user/edit-profile', cookie)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Chris Example')
+    expect(body).toContain('I make things.')
+    // no uploaded photo yet: the preview falls back to the shared placeholder image
+    expect(body).toContain('profile.jpg')
+  })
+})
+
+describe('POST /user/edit-profile — text fields', () => {
+  test('clean text is moderated per field and saved to the info JSON', async () => {
+    const user = await seedUser('epsave')
+    const cookie = await signIn(user)
+
+    const res = await post('/user/edit-profile', PROFILE_FIELDS, cookie)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/user/edit-profile')
+
+    expect(await profileInfo(user.id)).toEqual(PROFILE_FIELDS)
+    // one moderation call per non-empty field
+    expect(languageSpy.mock.calls.length).toBe(4)
+    expect(uploadSpy.mock.calls.length).toBe(0)
+  })
+
+  test('blank fields clear stored values and skip moderation', async () => {
+    const user = await seedUser('epclear')
+    await db.updateTable('users').set({ info: PROFILE_FIELDS }).where('id', '=', user.id).execute()
+    const cookie = await signIn(user)
+
+    const res = await post('/user/edit-profile', { fullname: '', title: '', location: '', bio: '' }, cookie)
+    expect(res.status).toBe(303)
+
+    expect(await profileInfo(user.id)).toEqual({})
+    expect(languageSpy.mock.calls.length).toBe(0)
+  })
+
+  test('a too-long field re-renders with the validation error before any moderation', async () => {
+    const user = await seedUser('eplong')
+    const cookie = await signIn(user)
+
+    const res = await post('/user/edit-profile', { ...PROFILE_FIELDS, fullname: 'x'.repeat(101) }, cookie)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Full name must be at most 100 characters long.')
+    expect(languageSpy.mock.calls.length).toBe(0)
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+
+  test('flagged text re-renders with a field error and nothing is saved', async () => {
+    const user = await seedUser('epflag')
+    const cookie = await signIn(user)
+    languageSpy.mockResolvedValueOnce(['Insult'])
+
+    const res = await post('/user/edit-profile', { fullname: '', title: '', location: '', bio: 'rude text' }, cookie)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('This text appears to contain inappropriate content.')
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+
+  test('a moderation outage fails closed with a form-level error', async () => {
+    const user = await seedUser('epdown')
+    const cookie = await signIn(user)
+    languageSpy.mockRejectedValueOnce(new Error('Failed to moderate content'))
+
+    const res = await post('/user/edit-profile', { fullname: '', title: '', location: '', bio: 'anything' }, cookie)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('check your text right now')
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+})
+
+describe('POST /user/edit-profile — profile image', () => {
+  const imageFile = () => new File([new Uint8Array([1, 2, 3])], 'me.jpg', { type: 'image/jpeg' })
+
+  test('uploads with a fresh profile- filename and stores the returned URL', async () => {
+    const user = await seedUser('epimg')
+    const cookie = await signIn(user)
+
+    const res = await postMultipart('/user/edit-profile', { ...PROFILE_FIELDS, image: imageFile() }, cookie)
+    expect(res.status).toBe(303)
+
+    expect(await profileInfo(user.id)).toEqual({ ...PROFILE_FIELDS, profileImageUrl: UPLOADED_URL })
+    expect(uploadSpy.mock.calls.length).toBe(1)
+    const [options] = uploadSpy.mock.calls[0] as [
+      { userUid: string; filename: string; mimetype: string; maxDimension: number; removePrefix?: string }
+    ]
+    expect(options.userUid).toBe(user.uid)
+    expect(options.filename).toStartWith('profile-')
+    expect(options.mimetype).toBe('image/jpeg')
+    expect(options.maxDimension).toBe(512)
+    expect(options.removePrefix).toBe('profile')
+  })
+
+  test('an image over 20MB re-renders with the size error without calling the upload API', async () => {
+    const user = await seedUser('epbig')
+    const cookie = await signIn(user)
+    const big = new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'big.jpg', { type: 'image/jpeg' })
+
+    const res = await postMultipart('/user/edit-profile', { ...PROFILE_FIELDS, image: big }, cookie)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Image is too large. The maximum size is 20MB.')
+    expect(uploadSpy.mock.calls.length).toBe(0)
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+
+  test('a non-image file type re-renders with the type error without calling the upload API', async () => {
+    const user = await seedUser('eptype')
+    const cookie = await signIn(user)
+    const pdf = new File([new Uint8Array([1, 2, 3])], 'resume.pdf', { type: 'application/pdf' })
+
+    const res = await postMultipart('/user/edit-profile', { ...PROFILE_FIELDS, image: pdf }, cookie)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Image must be a JPEG, PNG, or GIF.')
+    expect(uploadSpy.mock.calls.length).toBe(0)
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+
+  test('a rejected image re-renders with the image error and nothing is saved', async () => {
+    const user = await seedUser('epbad')
+    const cookie = await signIn(user)
+    uploadSpy.mockRejectedValueOnce(
+      new ImageUploadError('Image contains unacceptable content and cannot be uploaded.', {
+        image: ['Image contains unacceptable content and cannot be uploaded.']
+      })
+    )
+
+    const res = await postMultipart('/user/edit-profile', { ...PROFILE_FIELDS, image: imageFile() }, cookie)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Image contains unacceptable content and cannot be uploaded.')
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+
+  test('submitting without a file keeps the existing stored image URL', async () => {
+    const user = await seedUser('epkeep')
+    const kept = 'https://img.example.com/u/profile-kept.jpg'
+    await db
+      .updateTable('users')
+      .set({ info: { profileImageUrl: kept } })
+      .where('id', '=', user.id)
+      .execute()
+    const cookie = await signIn(user)
+
+    const res = await post('/user/edit-profile', PROFILE_FIELDS, cookie)
+    expect(res.status).toBe(303)
+    expect(uploadSpy.mock.calls.length).toBe(0)
+    expect(await profileInfo(user.id)).toEqual({ ...PROFILE_FIELDS, profileImageUrl: kept })
+  })
+})
+
+describe('GET /user/data', () => {
+  test('shows the export and delete sections, without an export link before any export', async () => {
+    const user = await seedUser('dpage')
+    const cookie = await signIn(user)
+    const res = await get('/user/data', cookie)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Generate Your Data Export')
+    expect(body).toContain('Delete My Account')
+    expect(body).not.toContain('Download your latest export')
+  })
+
+  test('shows the stored export link when one exists', async () => {
+    const user = await seedUser('dlink')
+    await db
+      .updateTable('users')
+      .set({ info: { lastExportUrl: EXPORT_URL } })
+      .where('id', '=', user.id)
+      .execute()
+    const cookie = await signIn(user)
+    const body = await (await get('/user/data', cookie)).text()
+    expect(body).toContain('Download your latest export')
+    expect(body).toContain(`href="${EXPORT_URL}"`)
+    // the date is derived from the dt= segment of the stored URL, as plain text after the link
+    expect(body).toContain('</a> created on 08/09/2026')
+  })
+})
+
+describe('POST /user/data/export', () => {
+  test('generates the export and stores the URL in the info JSON', async () => {
+    const user = await seedUser('dexp')
+    await db
+      .updateTable('users')
+      .set({ info: { fullname: 'Keep Me' } })
+      .where('id', '=', user.id)
+      .execute()
+    const cookie = await signIn(user)
+
+    const res = await post('/user/data/export', {}, cookie)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/user/data')
+
+    expect(exportSpy.mock.calls).toEqual([[user.uid]])
+    // the URL is merged into info without clobbering existing profile fields
+    expect(await profileInfo(user.id)).toEqual({ fullname: 'Keep Me', lastExportUrl: EXPORT_URL })
+  })
+
+  test('a UserDataError (already exported today) redirects back without touching the info JSON', async () => {
+    const user = await seedUser('dexp2')
+    const cookie = await signIn(user)
+    exportSpy.mockRejectedValueOnce(
+      new UserDataError('You already exported your data today. You can only do it once a day.', {
+        export: ['You already exported your data today. You can only do it once a day.']
+      })
+    )
+
+    const res = await post('/user/data/export', {}, cookie)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/user/data')
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+})
+
+describe('POST /user/data/delete', () => {
+  test('requires the word "delete" — anything else redirects back without deleting', async () => {
+    const user = await seedUser('dnope')
+    const cookie = await signIn(user)
+
+    const res = await post('/user/data/delete', { confirm: 'nope' }, cookie)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/user/data')
+    expect(deleteSpy.mock.calls.length).toBe(0)
+    expect(await db.selectFrom('users').select('id').where('id', '=', user.id).executeTakeFirst()).toBeDefined()
+  })
+
+  test('typing "delete" deletes the account, signs the user out, and redirects home', async () => {
+    const user = await seedUser('dyes')
+    const cookie = await signIn(user)
+
+    const res = await post('/user/data/delete', { confirm: ' Delete ' }, cookie)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/')
+    expect(deleteSpy.mock.calls).toEqual([[user.uid]])
+    expect(authCookie(res)).toContain('Max-Age=0')
+  })
+
+  test('a deletion failure redirects back with the account intact', async () => {
+    const user = await seedUser('dfail')
+    const cookie = await signIn(user)
+    deleteSpy.mockRejectedValueOnce(new Error('gcs down'))
+
+    const res = await post('/user/data/delete', { confirm: 'delete' }, cookie)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/user/data')
+    // not signed out on failure
+    expect(authCookie(res)).toBeUndefined()
   })
 })
 

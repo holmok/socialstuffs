@@ -54,6 +54,75 @@ export default {
     'input:autofill': {
       boxShadow: `0 0 0 1000px ${colors.bgMain} inset`
     },
+    textarea: {
+      display: 'block',
+      width: '100%',
+      backgroundColor: colors.bgSurfaceLight,
+      color: colors.fgMain,
+      border: 'none',
+      borderRadius: vars.borderRadiusSmall,
+      padding: vars.spacingSmall,
+      resize: 'vertical',
+      fontFamily: 'inherit',
+      fontSize: 'inherit'
+    },
+    'textarea::placeholder': {
+      color: colors.fgMutedMore
+    },
+    'textarea.error': {
+      backgroundColor: colors.bgError,
+      color: colors.fgError
+    },
+    'textarea.error::placeholder': {
+      color: colors.fgErrorMuted
+    },
+    '.image-input': {
+      textAlign: 'center'
+    },
+    '.image-preview': {
+      display: 'block',
+      width: '192px',
+      height: '192px',
+      objectFit: 'cover',
+      borderRadius: '50%',
+      margin: `0 auto ${vars.spacingSmall}`,
+      backgroundColor: colors.bgSurfaceLight
+    },
+    // visually hidden but still focusable, so tabbing to it outlines the styled label
+    'input.file-input': {
+      position: 'absolute',
+      width: '1px',
+      height: '1px',
+      padding: 0,
+      margin: '-1px',
+      overflow: 'hidden',
+      clipPath: 'inset(50%)',
+      whiteSpace: 'nowrap'
+    },
+    '.file-button': {
+      display: 'inline-block',
+      backgroundColor: colors.bgSurfaceLight,
+      color: colors.fgMain,
+      padding: `${vars.spacingSmall} ${vars.spacingMain}`,
+      fontSize: vars.fontSizeSmall,
+      fontWeight: '500',
+      borderRadius: vars.borderRadiusSmall,
+      cursor: 'pointer',
+      transition: `background-color ${vars.transitionMain}`
+    },
+    '.file-button:hover': {
+      backgroundColor: colors.borderColor
+    },
+    'input.file-input:focus-visible ~ .file-button': {
+      outline: `${vars.outlineWidthMain} solid ${colors.accentOrange}`,
+      outlineOffset: vars.outlineWidthMain
+    },
+    '.file-name': {
+      display: 'block',
+      marginTop: vars.spacingVerySmall,
+      fontSize: vars.fontSizeSmall,
+      color: colors.fgMuted
+    },
     'ul.errors': {
       listStyle: 'none',
       padding: 0,

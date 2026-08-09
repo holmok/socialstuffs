@@ -29,6 +29,8 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <script src="/js/htmx.min.2.0.10.js" defer></script>
         <script src="/js/nav.js" defer></script>
         <script src="/js/flash.js" defer></script>
+        <script src="/js/image-preview.js" defer></script>
+        <script src="/js/delete-confirm.js" defer></script>
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
