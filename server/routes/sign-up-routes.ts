@@ -13,6 +13,7 @@ import { z } from 'zod'
 import type { Config } from '@/config'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
+import { checkToken, claimToken, type TokenCheckFailure } from './token-helpers'
 
 const uniquey = new Uniquey() // short by design: public uid, not a secret
 const tokenUniquey = new Uniquey({ length: 32 })
@@ -64,6 +65,14 @@ function signUpError(c: Context, values: SignUpFormProps, errors: Record<string,
     { title: 'Sign Up', description: 'Create an account for socialstuffs.', styles: ['auth'] },
     status
   )
+}
+
+// per-reason log messages for the shared checkToken helper (this route keeps its own wording)
+const validationFailureLog: Record<TokenCheckFailure, string> = {
+  missing: 'Account validation invalid token',
+  uidMismatch: 'Account validation token does not match user',
+  claimed: 'Account validation token has already been claimed',
+  expired: 'Account validation token has expired'
 }
 
 export default function SignUpRoutes(app: Hono, logger: Logger) {
@@ -253,44 +262,17 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     const { db, logger } = c.var
 
     try {
-      const tokenRow = await db
-        .selectFrom('accountValidationTokens')
-        .innerJoin('users', 'users.id', 'accountValidationTokens.userId')
-        .where('accountValidationTokens.token', '=', token)
-        .select([
-          'accountValidationTokens.id',
-          'accountValidationTokens.userId',
-          'accountValidationTokens.claimed',
-          'accountValidationTokens.created',
-          'users.uid as userUid'
-        ])
-        .executeTakeFirst()
+      const check = await checkToken(db, 'accountValidationTokens', token, uid, utils.TOKEN_TTL_MS)
 
       let invalidToken = false
 
-      if (!tokenRow) {
-        logger.warn({ uid }, 'Account validation invalid token')
+      if (!check.ok) {
+        logger.warn({ uid }, validationFailureLog[check.reason])
         invalidToken = true
-      } else if (tokenRow.userUid !== uid) {
-        logger.warn({ uid }, 'Account validation token does not match user')
-        invalidToken = true
-      } else if (tokenRow.claimed) {
-        logger.warn({ uid }, 'Account validation token has already been claimed')
-        invalidToken = true
-      } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
-        logger.warn({ uid }, 'Account validation token has expired')
-        invalidToken = true
-      }
-
-      if (!invalidToken) {
+      } else {
+        // atomically claim the single-use token AND activate the user in one transaction
         const claimed = await db.transaction().execute(async (trx) => {
-          const claim = await trx
-            .updateTable('accountValidationTokens')
-            .set({ claimed: new Date() })
-            .where('token', '=', token)
-            .where('claimed', 'is', null)
-            .returning('userId')
-            .executeTakeFirst()
+          const claim = await claimToken(trx, 'accountValidationTokens', token, utils.TOKEN_TTL_MS)
 
           if (!claim) return false
 
