@@ -131,6 +131,13 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
           'posts.created as created',
           'posts.updated as updated'
         ])
+        .select((eb) =>
+          eb
+            .selectFrom('comments')
+            .select((cb) => cb.fn.countAll<number>().as('total'))
+            .whereRef('comments.postId', '=', 'posts.id')
+            .as('commentCount')
+        )
         // id breaks ties so posts created in the same instant keep a stable order across pages
         .orderBy('posts.created', 'desc')
         .orderBy('posts.id', 'desc')
@@ -159,7 +166,7 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         created: user.created,
         info,
         favorites,
-        posts,
+        posts: posts.map((post) => ({ ...post, commentCount: Number(post.commentCount ?? 0) })),
         page,
         hasNewer: page > 1,
         hasOlder: page * POSTS_PER_PAGE < totalPosts,

@@ -8,12 +8,15 @@ export type FeedPost = {
   linkText: string | null
   created: Date
   updated: Date
+  commentCount: number
   author: {
     uid: string
     name: string
     imageUrl: string
   }
 }
+
+const commentLabel = (count: number) => (count === 1 ? '1 comment' : `${count} comments`)
 
 type HomeUserPageProps = {
   posts: FeedPost[]
@@ -60,6 +63,8 @@ const HomeUserPage = ({ posts, page, hasNewer, hasOlder }: HomeUserPageProps) =>
                 Posted by <a href={`/profile/${post.author.uid}`}>{post.author.name}</a>{' '}
                 {formatDistanceToNow(post.created, { addSuffix: true })}
                 {isEdited(post) && ' (edited)'}
+                {' · '}
+                <a href={`/posts/${post.uid}`}>{commentLabel(post.commentCount)}</a>
               </p>
             </div>
           </article>

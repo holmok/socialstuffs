@@ -18,7 +18,10 @@ export type ProfilePost = {
   status: PostStatus
   created: Date
   updated: Date
+  commentCount: number
 }
+
+const commentLabel = (count: number) => (count === 1 ? '1 comment' : `${count} comments`)
 
 type ProfileUserPageProps = {
   username: string
@@ -108,6 +111,13 @@ const ProfileUserPage = ({
                     {formatDistanceToNow(post.created, { addSuffix: true })}
                     {isEdited(post) && ' (edited)'}
                     {actions.isSelf && ` · ${post.status}`}
+                    {/* drafts and archived posts have no viewable post page, so only published posts link there */}
+                    {post.status === 'published' && (
+                      <>
+                        {' · '}
+                        <a href={`/posts/${post.uid}`}>{commentLabel(post.commentCount)}</a>
+                      </>
+                    )}
                   </p>
                   {actions.isSelf && (
                     <a className="profile-post-edit" href={`/posts/${post.uid}/edit`}>

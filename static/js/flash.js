@@ -1,3 +1,9 @@
+function removeFlashItem(item) {
+  const container = item.closest('.flash')
+  item.remove()
+  if (container && container.children.length === 0) container.remove()
+}
+
 document.addEventListener('click', (event) => {
   const button = event.target.closest('.flash-close')
   if (!button) return
@@ -5,10 +11,25 @@ document.addEventListener('click', (event) => {
   const item = button.closest('.flash-item')
   if (!item) return
 
-  const container = item.closest('.flash')
-  item.remove()
-  if (container && container.children.length === 0) container.remove()
+  removeFlashItem(item)
 })
+
+// flash notices dismiss themselves after 10 seconds; the close button still clears them sooner
+const FLASH_DISMISS_MS = 10000
+
+function scheduleFlashDismissals() {
+  for (const item of document.querySelectorAll('.flash-item:not([data-dismiss-scheduled])')) {
+    item.dataset.dismissScheduled = 'true'
+    setTimeout(() => {
+      if (item.isConnected) removeFlashItem(item)
+    }, FLASH_DISMISS_MS)
+  }
+}
+
+document.addEventListener('DOMContentLoaded', scheduleFlashDismissals)
+// flashes injected by HTMX responses (the out-of-band error fragments) need timers too
+document.addEventListener('htmx:afterSwap', scheduleFlashDismissals)
+document.addEventListener('htmx:oobAfterSwap', scheduleFlashDismissals)
 
 // Surface transport-level htmx failures (server unreachable, request dropped)
 // as a native-looking, dismissible flash. Server HTTP errors are handled elsewhere.
@@ -38,6 +59,8 @@ function showTransportError(message) {
   item.appendChild(close)
 
   container.appendChild(item)
+  // no htmx swap event fires for transport failures, so start this item's timer directly
+  scheduleFlashDismissals()
 }
 
 const transportErrorMessage = "Couldn't reach the server. Please check your connection and try again."

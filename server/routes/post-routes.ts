@@ -1,7 +1,10 @@
 import { ImageUploadError } from '@api/image-api'
+import CommentForm from '@components/post/comment-form'
 import PostForm, { createStatusOptions, editStatusOptions, type StatusOption } from '@components/post/post-form'
+import type { UserProfileInfo } from '@data/user-data'
 import EditPostPage from '@pages/post/edit'
 import NewPostPage from '@pages/post/new'
+import PostViewPage, { type PostComment } from '@pages/post/view'
 import type { Context, Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import type { Logger } from 'pino'
@@ -15,6 +18,7 @@ const uidUniquey = new Uniquey() // short by design: public uid, not a secret
 const imageUniquey = new Uniquey({ length: 8 })
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024
+const COMMENT_LIMIT = 30
 // formats Jimp can decode; keep in sync with the accept attribute and hint in the post form
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif']
 
@@ -37,6 +41,11 @@ const editPostSchema = z.object({
 })
 
 type PostFormData = z.infer<typeof editPostSchema>
+
+const commentSchema = z.object({
+  content: z.string().trim().min(1, 'Comment text is required.').max(200, 'Comments must be at most 200 characters long.')
+})
+type CommentFormData = z.infer<typeof commentSchema>
 
 const postTextFields = ['content', 'linkText'] as const
 const postFormFields = ['content', 'linkUrl', 'linkText', 'status', 'audience'] as const
@@ -116,6 +125,43 @@ async function processPostForm(
   }
 
   return { data, uploadedImageUrl }
+}
+
+// users without an uploaded photo get the shared placeholder image from the bucket (mirrors profile-routes)
+function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
+  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
+  return info.profileImageUrl ?? new URL('profile.jpg', base).href
+}
+
+// a post you can view: published, by an active author, and the viewer is the author or in the
+// post's audience (utils.audienceAllows); anything else is a 404
+async function loadVisiblePost(c: Context, viewerUid: string) {
+  const uid = c.req.param('uid')
+  if (uid == null) throw new HTTPException(404, { message: 'Post not found' })
+  const post = await c.var.db
+    .selectFrom('posts')
+    .innerJoin('users', 'users.uid', 'posts.userUid')
+    .leftJoin('postTargets', 'postTargets.postId', 'posts.id')
+    .select([
+      'posts.id',
+      'posts.uid',
+      'posts.content',
+      'posts.imageUrl',
+      'posts.linkUrl',
+      'posts.linkText',
+      'posts.created',
+      'posts.updated',
+      'users.uid as authorUid',
+      'users.username as authorUsername',
+      'users.info as authorInfo'
+    ])
+    .where('posts.uid', '=', uid)
+    .where('posts.status', '=', 'published')
+    .where('users.status', '=', 'active')
+    .where((eb) => eb.or([eb('posts.userUid', '=', viewerUid), utils.audienceAllows(eb, viewerUid)]))
+    .executeTakeFirst()
+  if (post == null) throw new HTTPException(404, { message: 'Post not found' })
+  return post
 }
 
 // a post you can edit: yours and not deleted
@@ -275,5 +321,125 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     logger.info({ uid: user.uid, postUid: post.uid }, 'Post deleted')
     await flash.addFlash('success', 'Post deleted.')
     return utils.redirect(c, `/profile/${user.uid}`)
+  })
+
+  posts.get('/:uid', async (c) => {
+    const { auth, db, config } = c.var
+    const viewerUid = auth.user?.uid
+    if (viewerUid == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+    const post = await loadVisiblePost(c, viewerUid)
+
+    const [commentRows, countRow] = await Promise.all([
+      db
+        .selectFrom('comments')
+        .innerJoin('users', 'users.uid', 'comments.userUid')
+        .select([
+          'comments.uid as uid',
+          'comments.content as content',
+          'comments.created as created',
+          'users.uid as authorUid',
+          'users.username as authorUsername',
+          'users.info as authorInfo'
+        ])
+        .where('comments.postId', '=', post.id)
+        // id breaks ties so comments created in the same instant keep a stable order
+        .orderBy('comments.created', 'asc')
+        .orderBy('comments.id', 'asc')
+        .limit(COMMENT_LIMIT)
+        .execute(),
+      db
+        .selectFrom('comments')
+        .select((eb) => eb.fn.countAll<number>().as('total'))
+        .where('postId', '=', post.id)
+        .executeTakeFirst()
+    ])
+
+    const authorInfo = post.authorInfo as UserProfileInfo
+    const authorName = authorInfo.fullname ?? post.authorUsername
+    const comments: PostComment[] = commentRows.map((row) => {
+      const info = row.authorInfo as UserProfileInfo
+      return {
+        uid: row.uid,
+        content: row.content,
+        created: row.created,
+        author: {
+          uid: row.authorUid,
+          name: info.fullname ?? row.authorUsername,
+          imageUrl: displayImageUrl(info, config.baseImageUrl)
+        }
+      }
+    })
+
+    return c.render(
+      PostViewPage({
+        post: {
+          uid: post.uid,
+          content: post.content,
+          imageUrl: post.imageUrl,
+          linkUrl: post.linkUrl,
+          linkText: post.linkText,
+          created: post.created,
+          updated: post.updated,
+          author: { uid: post.authorUid, name: authorName, imageUrl: displayImageUrl(authorInfo, config.baseImageUrl) }
+        },
+        comments,
+        commentLimitReached: Number(countRow?.total ?? 0) >= COMMENT_LIMIT
+      }),
+      {
+        title: `Post by ${authorName}`,
+        description: `A post by ${authorName} and its comments.`,
+        styles: ['profile', 'home', 'auth', 'post']
+      }
+    )
+  })
+
+  posts.post('/:uid/comments', async (c) => {
+    const { logger, flash, auth, db, api } = c.var
+    const user = await auth.getUser()
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+    const post = await loadVisiblePost(c, user.uid)
+
+    const formData = await c.req.formData()
+    const contentValue = formData.get('content')
+    const form = { content: typeof contentValue === 'string' ? contentValue : '' }
+    const rerender = (content: string | undefined, errors: Record<string, string[]>) =>
+      c.html(CommentForm({ postUid: post.uid, content, errors }))
+
+    const result = utils.validateFormData<CommentFormData>(form, commentSchema)
+    if (!result.success) {
+      logger.warn({ errors: result.errors }, 'Validation errors on comment form')
+      return rerender(form.content, result.errors as Record<string, string[]>)
+    }
+    const { content } = result.data
+
+    // a moderation outage fails closed (form-level error) rather than letting unchecked text through
+    try {
+      const flags = await api.language.getContentFlags(content)
+      if (flags.length > 0) {
+        logger.warn({ uid: user.uid, postUid: post.uid }, 'Comment text flagged by moderation')
+        return rerender(content, { content: ['This text appears to contain inappropriate content.'] })
+      }
+    } catch (error) {
+      utils.logError(logger, error, 'Error moderating comment text')
+      return rerender(content, { form: ["We couldn't check your text right now. Please try again."] })
+    }
+
+    const countRow = await db
+      .selectFrom('comments')
+      .select((eb) => eb.fn.countAll<number>().as('total'))
+      .where('postId', '=', post.id)
+      .executeTakeFirst()
+    if (Number(countRow?.total ?? 0) >= COMMENT_LIMIT) {
+      return rerender(content, { form: ['This post has reached its comment limit.'] })
+    }
+
+    await db
+      .insertInto('comments')
+      .values({ uid: uidUniquey.create(), postId: post.id, userId: user.id, userUid: user.uid, content })
+      .execute()
+
+    logger.info({ uid: user.uid, postUid: post.uid }, 'Comment added')
+    await flash.addFlash('success', 'Comment added.')
+    return utils.redirect(c, `/posts/${post.uid}`)
   })
 }

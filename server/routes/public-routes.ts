@@ -86,6 +86,13 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
           'users.username as authorUsername',
           'users.info as authorInfo'
         ])
+        .select((eb) =>
+          eb
+            .selectFrom('comments')
+            .select((cb) => cb.fn.countAll<number>().as('total'))
+            .whereRef('comments.postId', '=', 'posts.id')
+            .as('commentCount')
+        )
         // id breaks ties so posts created in the same instant keep a stable order across pages
         .orderBy('posts.created', 'desc')
         .orderBy('posts.id', 'desc')
@@ -108,6 +115,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
         linkText: row.linkText,
         created: row.created,
         updated: row.updated,
+        commentCount: Number(row.commentCount ?? 0),
         author: {
           uid: row.authorUid,
           name: info.fullname ?? row.authorUsername,
