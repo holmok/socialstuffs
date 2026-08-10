@@ -28,14 +28,12 @@ type SetPasswordData = z.infer<typeof setPasswordSchema>
 
 // HTMX failures re-render the set-password form fragment; no-JS failures re-render the full page
 // (mirrors the GET form). Password values are never echoed back
-function setPasswordError(c: Context, token: string, uid: string, errors: Record<string, string[]>, status?: 500) {
-  return utils.formErrorResponse(
-    c,
-    SetPasswordForm({ token, uid, errors }),
-    RecoverPasswordSetPage({ token, uid, errors }),
-    { title: 'Set a New Password', description: 'Choose a new password for your account.', styles: ['auth'] },
-    status
-  )
+function setPasswordError(c: Context, token: string, uid: string, errors: Record<string, string[]>) {
+  return utils.formErrorResponse(c, SetPasswordForm({ token, uid, errors }), RecoverPasswordSetPage({ token, uid, errors }), {
+    title: 'Set a New Password',
+    description: 'Choose a new password for your account.',
+    styles: ['auth']
+  })
 }
 
 export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
@@ -210,68 +208,67 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
       })
     }
 
-    try {
-      // validate BEFORE claiming (mirrors validate-account): reject missing / uid-mismatch /
-      // already-claimed / expired. uid and created are immutable so pre-checking them is TOCTOU-free;
-      // only `claimed` races, and the atomic claim below (with a freshness predicate) handles that.
-      const tokenRow = await db
-        .selectFrom('passwordRecoveryTokens')
-        .innerJoin('users', 'users.id', 'passwordRecoveryTokens.userId')
-        .where('passwordRecoveryTokens.token', '=', token)
-        .select([
-          'passwordRecoveryTokens.userId',
-          'passwordRecoveryTokens.claimed',
-          'passwordRecoveryTokens.created',
-          'users.uid as userUid'
-        ])
+    // No catch-all: every expected failure state (missing / uid-mismatch / already-claimed / expired /
+    // concurrently-claimed token) returns failure() explicitly; unexpected throws go to the errorHandler.
+    // The old catch also wrapped the post-reset flash+redirect, so a throw AFTER the password was
+    // already updated rendered "try again later" in-form — misleading, since the reset had succeeded.
+    // validate BEFORE claiming (mirrors validate-account): reject missing / uid-mismatch /
+    // already-claimed / expired. uid and created are immutable so pre-checking them is TOCTOU-free;
+    // only `claimed` races, and the atomic claim below (with a freshness predicate) handles that.
+    const tokenRow = await db
+      .selectFrom('passwordRecoveryTokens')
+      .innerJoin('users', 'users.id', 'passwordRecoveryTokens.userId')
+      .where('passwordRecoveryTokens.token', '=', token)
+      .select([
+        'passwordRecoveryTokens.userId',
+        'passwordRecoveryTokens.claimed',
+        'passwordRecoveryTokens.created',
+        'users.uid as userUid'
+      ])
+      .executeTakeFirst()
+
+    if (!tokenRow) {
+      logger.warn({ uid }, 'Password reset invalid token')
+      return failure()
+    } else if (tokenRow.userUid !== uid) {
+      logger.warn({ uid }, 'Password reset token does not match user')
+      return failure()
+    } else if (tokenRow.claimed) {
+      logger.warn({ uid }, 'Password reset token has already been claimed')
+      return failure()
+    } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
+      logger.warn({ uid }, 'Password reset token has expired')
+      return failure()
+    }
+
+    const passwordHash = await Bun.password.hash(data.password, { algorithm: 'bcrypt', cost: 10 })
+
+    // atomically claim the single-use token AND update the password in one transaction; the
+    // freshness predicate keeps expiry race-safe alongside the `claimed is null` single-use guard
+    const claimed = await db.transaction().execute(async (trx) => {
+      const claim = await trx
+        .updateTable('passwordRecoveryTokens')
+        .set({ claimed: new Date() })
+        .where('token', '=', token)
+        .where('claimed', 'is', null)
+        .where('created', '>', new Date(Date.now() - utils.TOKEN_TTL_MS))
+        .returning('userId')
         .executeTakeFirst()
 
-      if (!tokenRow) {
-        logger.warn({ uid }, 'Password reset invalid token')
-        return failure()
-      } else if (tokenRow.userUid !== uid) {
-        logger.warn({ uid }, 'Password reset token does not match user')
-        return failure()
-      } else if (tokenRow.claimed) {
-        logger.warn({ uid }, 'Password reset token has already been claimed')
-        return failure()
-      } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
-        logger.warn({ uid }, 'Password reset token has expired')
-        return failure()
-      }
+      if (!claim) return false
 
-      const passwordHash = await Bun.password.hash(data.password, { algorithm: 'bcrypt', cost: 10 })
+      await trx.updateTable('users').set({ passwordHash }).where('id', '=', claim.userId).where('uid', '=', uid).execute()
 
-      // atomically claim the single-use token AND update the password in one transaction; the
-      // freshness predicate keeps expiry race-safe alongside the `claimed is null` single-use guard
-      const claimed = await db.transaction().execute(async (trx) => {
-        const claim = await trx
-          .updateTable('passwordRecoveryTokens')
-          .set({ claimed: new Date() })
-          .where('token', '=', token)
-          .where('claimed', 'is', null)
-          .where('created', '>', new Date(Date.now() - utils.TOKEN_TTL_MS))
-          .returning('userId')
-          .executeTakeFirst()
+      return true
+    })
 
-        if (!claim) return false
-
-        await trx.updateTable('users').set({ passwordHash }).where('id', '=', claim.userId).where('uid', '=', uid).execute()
-
-        return true
-      })
-
-      if (!claimed) {
-        logger.warn({ uid }, 'Password reset token was claimed concurrently')
-        return failure()
-      }
-
-      logger.info({ uid }, 'Password reset successfully')
-      await flash.addFlash('success', 'Your password has been reset. Please sign in.')
-      return utils.redirect(c, '/sign-in')
-    } catch (error) {
-      utils.logError(logger, error, 'Error resetting password')
-      return setPasswordError(c, token, uid, { form: ['An unexpected error occurred. Please try again later.'] }, 500)
+    if (!claimed) {
+      logger.warn({ uid }, 'Password reset token was claimed concurrently')
+      return failure()
     }
+
+    logger.info({ uid }, 'Password reset successfully')
+    await flash.addFlash('success', 'Your password has been reset. Please sign in.')
+    return utils.redirect(c, '/sign-in')
   })
 }
