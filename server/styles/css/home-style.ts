@@ -1,6 +1,6 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
-import { avatar, hairline } from '../_mixins'
+import { avatar, cardSurface, hairline } from '../_mixins'
 import * as vars from '../_vars'
 
 export default {
@@ -33,5 +33,18 @@ export default {
   '.feed-post-body': {
     flex: '1',
     minWidth: '0'
+  },
+  // callout pointing circle-less users at /discover
+  '.feed-cta': {
+    ...cardSurface,
+    padding: vars.spacingMid,
+    marginBottom: vars.spacingMid,
+    fontSize: vars.fontSizeSmall,
+    color: colors.fgMuted
+  },
+  '.discover-note': {
+    fontSize: vars.fontSizeSmall,
+    color: colors.fgMuted,
+    marginBottom: vars.spacingMid
   }
 } as CSSObject
