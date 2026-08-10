@@ -382,5 +382,49 @@ describe('POST /profile/:uid/favorite', () => {
     const body = await (await get(`/profile/${viewer.uid}`, cookie)).text()
     expect(body).toContain(`href="/profile/${target.uid}"`)
     expect(body).toContain('title="Fay Seen"')
+    // below the strip cap there is no overflow indicator
+    expect(body).not.toContain('…and more')
+  })
+
+  test('the favorites strip caps at 20 avatars and shows an overflow indicator', async () => {
+    const owner = await seedUser('fcap')
+    // the favorited users never sign in, so skip the bcrypt hash and seed them in bulk
+    const friends = await db
+      .insertInto('users')
+      .values(
+        Array.from({ length: 21 }, (_, i) => {
+          const username = `ufc${i}${suffix}`.slice(0, 15)
+          const email = `fc${i}-${suffix}@example.com`
+          return {
+            uid: `test-fc${i}-${suffix}`,
+            username,
+            normalizedUsername: username.toLowerCase(),
+            email,
+            normalizedEmail: normalizeEmail(email),
+            passwordHash: 'not-a-real-hash'
+          }
+        })
+      )
+      .returning(['id', 'uid'])
+      .execute()
+    await db
+      .updateTable('users')
+      .set({ status: 'active' })
+      .where(
+        'id',
+        'in',
+        friends.map((f) => f.id)
+      )
+      .execute()
+    await db
+      .insertInto('favorites')
+      .values(friends.map((f) => ({ userId: owner.id, userUid: owner.uid, friendId: f.id, friendUid: f.uid })))
+      .execute()
+    const cookie = await signIn(owner)
+
+    const body = await (await get(`/profile/${owner.uid}`, cookie)).text()
+    // count rendered avatars via the class attribute (the bare name also appears in the inline <style> block)
+    expect(body.split('class="profile-favorite-avatar"').length - 1).toBe(20)
+    expect(body).toContain('…and more')
   })
 })
