@@ -38,7 +38,7 @@ Startup flow: `server/index.ts` loads config, creates the pino logger (stdout al
 
 ### Data layer (`server/data/`)
 
-Postgres accessed through Kysely (`pg` pool, `CamelCasePlugin`, `WithSchemaPlugin` using `DATABASE_SCHEMA`). Each `*-data.ts` file defines a table's Kysely types (`XTable` plus `Selectable`/`Insertable`/`Updateable` aliases); `data/index.ts` re-exports them and assembles the `Database` type (users, posts, comments, favorites, relations, postTargets, accountValidationTokens, passwordRecoveryTokens, kvStorage). Handlers query directly via `c.var.db` — there is no repository layer. Schema migrations live in `migrations/` (node-pg-migrate, run via `bun run migrate`); note the migrations also create a `cachedQueries` table that has no Kysely type and no `server/` usage yet.
+Postgres accessed through Kysely (`pg` pool, `CamelCasePlugin`, `WithSchemaPlugin` using `DATABASE_SCHEMA`). Each `*-data.ts` file defines a table's Kysely types (`XTable` plus `Selectable`/`Insertable`/`Updateable` aliases); `data/index.ts` re-exports them and assembles the `Database` type (users, posts, comments, favorites, relations, postTargets, accountValidationTokens, passwordRecoveryTokens, kvStorage). Handlers query directly via `c.var.db` — there is no repository layer. Schema migrations live in `migrations/` (node-pg-migrate, run via `bun run migrate`).
 
 ### API layer (`server/api/`)
 

@@ -458,7 +458,7 @@ describe('POST /user/settings — email change', () => {
 
 async function profileInfo(userId: number): Promise<UserProfileInfo> {
   const row = await db.selectFrom('users').select(['info']).where('id', '=', userId).executeTakeFirstOrThrow()
-  return row.info as UserProfileInfo
+  return row.info
 }
 
 const PROFILE_FIELDS = { fullname: 'Chris Example', title: 'Builder', location: 'Portland', bio: 'I make things.' }

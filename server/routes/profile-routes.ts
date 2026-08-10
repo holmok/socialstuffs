@@ -1,12 +1,14 @@
 import ProfileActions from '@components/profile/actions'
 import type { RelationType } from '@data/relation-data'
-import type { UserProfileInfo } from '@data/user-data'
 import ProfileUserPage, { type ProfileFavorite } from '@pages/profile/user'
 import type { Context, Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import type { Logger } from 'pino'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
+
+// the profile favorites strip is a fixed-size teaser, not a full list — cap what one page load pulls in
+const FAVORITES_STRIP_LIMIT = 20
 
 // posts visible on a profile: the owner sees all their non-deleted posts; anyone else sees only
 // published posts whose audience includes them (utils.audienceAllows)
@@ -96,7 +98,7 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
       .executeTakeFirst()
     if (user == null) throw new HTTPException(404, { message: 'User not found' })
 
-    const info = { ...(user.info as UserProfileInfo) }
+    const info = { ...user.info }
     info.profileImageUrl = utils.displayImageUrl(info, config.baseImageUrl)
 
     // ?p=<page> drives the posts offset; anything unparseable or below 1 lands on page 1
@@ -111,6 +113,8 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         .where('favorites.userUid', '=', uid)
         .where('users.status', '=', 'active')
         .orderBy('favorites.created', 'desc')
+        // one extra row decides hasMoreFavorites — the strip renders at most FAVORITES_STRIP_LIMIT avatars
+        .limit(FAVORITES_STRIP_LIMIT + 1)
         .execute(),
       profilePostsQuery(c, uid, viewerUid)
         .select([
@@ -139,15 +143,13 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         .execute()
     ])
     const hasOlder = posts.length > utils.POSTS_PER_PAGE
+    const hasMoreFavorites = favoriteRows.length > FAVORITES_STRIP_LIMIT
 
-    const favorites: ProfileFavorite[] = favoriteRows.map((row) => {
-      const rowInfo = row.info as UserProfileInfo
-      return {
-        uid: row.uid,
-        name: rowInfo.fullname ?? row.username,
-        imageUrl: utils.displayImageUrl(rowInfo, config.baseImageUrl)
-      }
-    })
+    const favorites: ProfileFavorite[] = favoriteRows.slice(0, FAVORITES_STRIP_LIMIT).map((row) => ({
+      uid: row.uid,
+      name: row.info.fullname ?? row.username,
+      imageUrl: utils.displayImageUrl(row.info, config.baseImageUrl)
+    }))
 
     const name = info.fullname ?? user.username
     return c.render(
@@ -156,6 +158,7 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         created: user.created,
         info,
         favorites,
+        hasMoreFavorites,
         posts: posts.slice(0, utils.POSTS_PER_PAGE).map((post) => ({ ...post, commentCount: Number(post.commentCount ?? 0) })),
         page,
         hasNewer: page > 1,

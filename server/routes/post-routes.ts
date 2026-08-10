@@ -1,6 +1,5 @@
 import CommentForm from '@components/post/comment-form'
 import PostForm, { createStatusOptions, editStatusOptions } from '@components/post/post-form'
-import type { UserProfileInfo } from '@data/user-data'
 import EditPostPage from '@pages/post/edit'
 import NewPostPage from '@pages/post/new'
 import PostViewPage, { type PostComment } from '@pages/post/view'
@@ -347,10 +346,10 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         .executeTakeFirst()
     ])
 
-    const authorInfo = post.authorInfo as UserProfileInfo
+    const authorInfo = post.authorInfo
     const authorName = authorInfo.fullname ?? post.authorUsername
     const comments: PostComment[] = commentRows.map((row) => {
-      const info = row.authorInfo as UserProfileInfo
+      const info = row.authorInfo
       return {
         uid: row.uid,
         content: row.content,

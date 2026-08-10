@@ -28,10 +28,8 @@ export class UserDataError extends Error {
   }
 }
 
-type DenormalizedInfo = {
-  favorites?: string[]
-  relations?: { approved?: string[]; disapproved?: string[] }
-} & Record<string, unknown>
+// keep a large export from hammering GCS (or stalling on one file at a time)
+const IMAGE_DOWNLOAD_CONCURRENCY = 4
 
 export default class UserDataAPI {
   private readonly logger: Logger
@@ -115,10 +113,15 @@ export default class UserDataAPI {
       }
       const imagePrefix = `${userUid}/`
       const [imageFiles] = await bucket.getFiles({ prefix: imagePrefix })
-      for (const imageFile of imageFiles) {
-        const [contents] = await imageFile.download()
-        // jpegs are already compressed — store, don't deflate
-        entries[`images/${imageFile.name.slice(imagePrefix.length)}`] = [new Uint8Array(contents), { level: 0 }]
+      // bounded concurrency: download in chunks of IMAGE_DOWNLOAD_CONCURRENCY
+      for (let i = 0; i < imageFiles.length; i += IMAGE_DOWNLOAD_CONCURRENCY) {
+        await Promise.all(
+          imageFiles.slice(i, i + IMAGE_DOWNLOAD_CONCURRENCY).map(async (imageFile) => {
+            const [contents] = await imageFile.download()
+            // jpegs are already compressed — store, don't deflate
+            entries[`images/${imageFile.name.slice(imagePrefix.length)}`] = [new Uint8Array(contents), { level: 0 }]
+          })
+        )
       }
 
       // async zip compresses on worker threads so a large export doesn't block the event loop
@@ -144,27 +147,6 @@ export default class UserDataAPI {
       await this.db.transaction().execute(async (trx) => {
         const user = await trx.selectFrom('users').select('id').where('uid', '=', userUid).executeTakeFirst()
         if (user == null) throw new UserDataError('User not found', { user: ['User not found'] })
-
-        // Other users keep denormalized uid lists in users.info — scrub this user out of them first
-        const favoritedBy = trx.selectFrom('favorites').select('userUid').where('friendUid', '=', userUid)
-        const relatedBy = trx.selectFrom('relations').select('userUid').where('friendUid', '=', userUid)
-        const affected = await trx
-          .selectFrom('users')
-          .select(['uid', 'info'])
-          .where((eb) => eb.or([eb('uid', 'in', favoritedBy), eb('uid', 'in', relatedBy)]))
-          .execute()
-        for (const { uid, info } of affected) {
-          const current = info as DenormalizedInfo
-          const cleaned = {
-            ...current,
-            favorites: (current.favorites ?? []).filter((favoriteUid) => favoriteUid !== userUid),
-            relations: {
-              approved: (current.relations?.approved ?? []).filter((approvedUid) => approvedUid !== userUid),
-              disapproved: (current.relations?.disapproved ?? []).filter((disapprovedUid) => disapprovedUid !== userUid)
-            }
-          }
-          await trx.updateTable('users').set({ info: cleaned }).where('uid', '=', uid).execute()
-        }
 
         // FK order: children first (mirrors scripts/unseed-fake-data.ts)
         // Comments the user wrote anywhere, plus comments others left on the user's posts
