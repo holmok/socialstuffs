@@ -1,4 +1,5 @@
 import type { UserProfileInfo } from '@data/user-data'
+import { passwordVersion } from '@middleware/auth-middleware'
 import AboutPage from '@pages/about'
 import ContactPage from '@templates/pages/contact'
 import HomeAnonPage from '@templates/pages/home-anon'
@@ -60,7 +61,16 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   app.get('/', async (c) => {
     const { auth, config } = c.var
 
-    if (auth.user == null) {
+    // re-check the DB like authorize() does: JWT claims are a sign-in-time snapshot, and a banned/
+    // deleted user (or one whose password changed) must lose the feed now, not at the 7-day exp
+    let revoked = false
+    if (auth.user != null) {
+      const row = await auth.getUserRow()
+      revoked = row == null || row.status !== 'active' || passwordVersion(row.passwordHash) !== auth.user.pwv
+      if (revoked) await auth.signOut()
+    }
+
+    if (auth.user == null || revoked) {
       return c.render(HomeAnonPage(), {
         title: 'Home',
         description: 'A great place to hang out and share your thoughts.',

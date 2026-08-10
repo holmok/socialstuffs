@@ -1,10 +1,14 @@
 import SignInForm from '@templates/components/sign-in-form'
 
-const SignInPage = () => {
+type SignInPageProps = {
+  next?: string
+}
+
+const SignInPage = (props: SignInPageProps = {}) => {
   return (
     <>
       <h1>Sign In</h1>
-      <SignInForm />
+      <SignInForm next={props.next} />
     </>
   )
 }

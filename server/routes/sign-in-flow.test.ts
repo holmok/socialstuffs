@@ -143,6 +143,48 @@ describe('POST /sign-in', () => {
   })
 })
 
+describe('deep-link next param', () => {
+  test('a 401 deep link round-trips through sign-in back to the original path', async () => {
+    const user = await seedUser('dlnext', 'active')
+
+    // the 401 redirect carries the original path+query in ?next=
+    const denied = await app.request('http://localhost/user/settings?tab=email')
+    expect(denied.status).toBe(302)
+    const location = denied.headers.get('location')
+    expect(location).toBe(`/sign-in?next=${encodeURIComponent('/user/settings?tab=email')}`)
+
+    // the sign-in page threads it into the form as a hidden input
+    const html = await (await app.request(`http://localhost${location}`)).text()
+    expect(html).toContain('name="next"')
+    expect(html).toContain('value="/user/settings?tab=email"')
+
+    // and a successful sign-in returns to the deep link instead of /
+    const res = await post('/sign-in', { email: user.email, password: PASSWORD, next: '/user/settings?tab=email' })
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/user/settings?tab=email')
+  })
+
+  test('an absolute-URL next falls back to / (no open redirect)', async () => {
+    const user = await seedUser('dlevil', 'active')
+    const res = await post('/sign-in', { email: user.email, password: PASSWORD, next: 'https://evil.example' })
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/')
+  })
+
+  test('a protocol-relative next falls back to / (no open redirect)', async () => {
+    const user = await seedUser('dlprot', 'active')
+    const res = await post('/sign-in', { email: user.email, password: PASSWORD, next: '//evil.example' })
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/')
+  })
+
+  test('the sign-in page drops an unsafe next instead of rendering it', async () => {
+    const html = await (await app.request('http://localhost/sign-in?next=https%3A%2F%2Fevil.example')).text()
+    expect(html).not.toContain('name="next"')
+    expect(html).not.toContain('evil.example')
+  })
+})
+
 describe('per-account failed-login lockout', () => {
   test('10 failures across distinct IPs lock the account: even the correct password is then rejected', async () => {
     const user = await seedUser('lock', 'active')

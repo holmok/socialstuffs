@@ -118,7 +118,7 @@ describe('auth gating on /posts', () => {
   test('unauthenticated GET /posts/new redirects to /sign-in', async () => {
     const res = await get('/posts/new')
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/sign-in')
+    expect(res.headers.get('location')).toBe('/sign-in?next=%2Fposts%2Fnew')
   })
 })
 
@@ -514,10 +514,11 @@ describe('New Post link on the profile page', () => {
     const other = await seedUser('nlyou')
     const cookie = await signIn(user)
 
+    // the nav's New Post item appears on every authenticated page, so scope to the profile-specific link
     const own = await (await get(`/profile/${user.uid}`, cookie)).text()
-    expect(own).toContain('href="/posts/new"')
+    expect(own).toContain('class="profile-new-post-link"')
 
     const theirs = await (await get(`/profile/${other.uid}`, cookie)).text()
-    expect(theirs).not.toContain('href="/posts/new"')
+    expect(theirs).not.toContain('class="profile-new-post-link"')
   })
 })

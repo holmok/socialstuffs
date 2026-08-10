@@ -33,7 +33,9 @@ const HomeUserPage = ({ posts, page, hasNewer, hasOlder }: HomeUserPageProps) =>
     <div class="home-user">
       <h1>Latest Posts from Your Circle</h1>
       {posts.length === 0 ? (
-        <p class="profile-empty">Nothing here yet. Favorite or approve some people to fill your feed.</p>
+        <p class="profile-empty">
+          Nothing here yet. Favorite or approve some people to fill your feed, or <a href="/posts/new">write your first post</a>.
+        </p>
       ) : (
         posts.map((post) => (
           <article class="profile-post feed-post" key={post.uid}>

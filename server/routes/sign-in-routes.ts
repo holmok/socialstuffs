@@ -17,11 +17,22 @@ const signInSchema = z.object({
 
 type SignInData = z.infer<typeof signInSchema>
 
+// where to land after sign-in: only same-site absolute paths survive — no protocol-relative
+// ('//evil.example') or schemed ('https://evil.example') values, so it can't open-redirect
+function safeNext(next: string | undefined): string | undefined {
+  if (next?.startsWith('/') && !next.startsWith('//') && !next.includes('://')) return next
+  return undefined
+}
+
 export default function SignInRoutes(app: Hono, logger: Logger) {
   logger.info('Registering sign-in routes')
 
   app.get('/sign-in', (c) => {
-    return c.render(SignInPage(), { title: 'Sign in', description: 'Sign in to socialstuffs.', styles: ['auth'] })
+    return c.render(SignInPage({ next: safeNext(c.req.query('next')) }), {
+      title: 'Sign in',
+      description: 'Sign in to socialstuffs.',
+      styles: ['auth']
+    })
   })
 
   const signInLimit = m.rateLimit({
@@ -104,7 +115,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         logger.info({ userId: user.id }, 'User signed in successfully')
 
         await flash.addFlash('success', 'You have signed in successfully.')
-        return utils.redirect(c, '/')
+        return utils.redirect(c, safeNext(form.next) ?? '/')
       } catch (error) {
         utils.logError(logger, error, 'Error during sign-in')
         return c.html(SignInForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }))

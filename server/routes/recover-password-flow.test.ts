@@ -340,6 +340,6 @@ describe('password reset revokes existing sessions', () => {
     // the old session is now rejected (401 -> redirect to /sign-in)
     const after = await app.request('http://localhost/user', { headers: { cookie } })
     expect(after.status).toBe(302)
-    expect(after.headers.get('location')).toBe('/sign-in')
+    expect(after.headers.get('location')).toBe('/sign-in?next=%2Fuser')
   })
 })
