@@ -1,7 +1,9 @@
 import type data from '@data/index'
+import type { Database } from '@data/index'
 import type { Server } from 'bun'
 import type { Context } from 'hono'
 import type { PinoLogger } from 'hono-pino'
+import type { ExpressionBuilder } from 'kysely'
 import type { Logger } from 'pino'
 import { z } from 'zod'
 
@@ -116,4 +118,49 @@ export function validateFormData<T>(data: Record<string, unknown>, schema: z.Zod
     return { success: false, data, errors: fieldErrors }
   }
   return { success: true, data: result.data, errors: {} }
+}
+
+// which of an author's posts a viewer may see, judged from the post's audience row: 'all' always;
+// 'favorites' when the author favorited the viewer; 'approved' when the author approved the viewer;
+// 'non_disapproved' unless the author disapproved the viewer. Posts predating audience rows count
+// as 'all' (mirrors the edit form default). Use inside a query that left-joins postTargets to posts.
+export function audienceAllows(eb: ExpressionBuilder<Database, 'posts' | 'postTargets'>, viewerUid: string) {
+  return eb.or([
+    eb('postTargets.type', 'is', null),
+    eb('postTargets.type', '=', 'all'),
+    eb.and([
+      eb('postTargets.type', '=', 'favorites'),
+      eb.exists(
+        eb
+          .selectFrom('favorites')
+          .select('favorites.id')
+          .whereRef('favorites.userUid', '=', 'posts.userUid')
+          .where('favorites.friendUid', '=', viewerUid)
+      )
+    ]),
+    eb.and([
+      eb('postTargets.type', '=', 'approved'),
+      eb.exists(
+        eb
+          .selectFrom('relations')
+          .select('relations.id')
+          .whereRef('relations.userUid', '=', 'posts.userUid')
+          .where('relations.friendUid', '=', viewerUid)
+          .where('relations.type', '=', 'approve')
+      )
+    ]),
+    eb.and([
+      eb('postTargets.type', '=', 'non_disapproved'),
+      eb.not(
+        eb.exists(
+          eb
+            .selectFrom('relations')
+            .select('relations.id')
+            .whereRef('relations.userUid', '=', 'posts.userUid')
+            .where('relations.friendUid', '=', viewerUid)
+            .where('relations.type', '=', 'disapprove')
+        )
+      )
+    ])
+  ])
 }

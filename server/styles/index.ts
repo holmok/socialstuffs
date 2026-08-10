@@ -3,12 +3,13 @@ import type * as CSS from 'csstype'
 import errorStyles from './css/error-style'
 import authStyles from './css/form-style'
 import globalStyles from './css/global-style'
+import homeStyles from './css/home-style'
 import infoStyles from './css/info-style'
 import profileStyles from './css/profile-style'
 import resetStyles from './css/reset-style'
 import userStyles from './css/user-style'
 
-export type style = 'global' | 'reset' | 'auth' | 'info' | 'error' | 'user' | 'profile'
+export type style = 'global' | 'reset' | 'auth' | 'info' | 'error' | 'user' | 'profile' | 'home'
 
 const stylesMap: Record<style, string> = {
   global: renderCSS(globalStyles),
@@ -17,7 +18,8 @@ const stylesMap: Record<style, string> = {
   info: renderCSS(infoStyles),
   error: renderCSS(errorStyles),
   user: renderCSS(userStyles),
-  profile: renderCSS(profileStyles)
+  profile: renderCSS(profileStyles),
+  home: renderCSS(homeStyles)
 }
 
 const cachedStyleCombos: Record<string, string> = {}

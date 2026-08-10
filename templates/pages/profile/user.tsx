@@ -1,4 +1,5 @@
 import ProfileActions, { type ProfileActionsProps } from '@components/profile/actions'
+import type { PostStatus } from '@data/post-data'
 import type { UserProfileInfo } from '@data/user-data'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -14,6 +15,7 @@ export type ProfilePost = {
   imageUrl: string | null
   linkUrl: string | null
   linkText: string | null
+  status: PostStatus
   created: Date
   updated: Date
 }
@@ -105,6 +107,7 @@ const ProfileUserPage = ({
                   <p className="profile-post-date">
                     {formatDistanceToNow(post.created, { addSuffix: true })}
                     {isEdited(post) && ' (edited)'}
+                    {actions.isSelf && ` · ${post.status}`}
                   </p>
                   {actions.isSelf && (
                     <a className="profile-post-edit" href={`/posts/${post.uid}/edit`}>

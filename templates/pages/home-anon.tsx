@@ -1,4 +1,4 @@
-const HomePage = () => {
+const HomeAnonPage = () => {
   return (
     <div class="home-anon">
       <section class="hero">
@@ -90,4 +90,4 @@ const HomePage = () => {
   )
 }
 
-export default HomePage
+export default HomeAnonPage

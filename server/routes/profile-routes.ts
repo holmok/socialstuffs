@@ -16,6 +16,17 @@ function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
   return info.profileImageUrl ?? new URL('profile.jpg', base).href
 }
 
+// posts visible on a profile: the owner sees all their non-deleted posts; anyone else sees only
+// published posts whose audience includes them (utils.audienceAllows)
+function profilePostsQuery(c: Context, profileUid: string, viewerUid: string) {
+  const query = c.var.db
+    .selectFrom('posts')
+    .leftJoin('postTargets', 'postTargets.postId', 'posts.id')
+    .where('posts.userUid', '=', profileUid)
+  if (viewerUid === profileUid) return query.where('posts.status', '!=', 'deleted')
+  return query.where('posts.status', '=', 'published').where((eb) => utils.audienceAllows(eb, viewerUid))
+}
+
 // tallies received by the profile plus the viewer's own relation/favorite state, for the actions fragment
 async function actionState(c: Context, viewerUid: string, profileUid: string) {
   const { db } = c.var
@@ -109,22 +120,25 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         .where('users.status', '=', 'active')
         .orderBy('favorites.created', 'desc')
         .execute(),
-      db
-        .selectFrom('posts')
-        .select(['uid', 'content', 'imageUrl', 'linkUrl', 'linkText', 'created', 'updated'])
-        .where('userUid', '=', uid)
-        .where('status', '=', 'published')
+      profilePostsQuery(c, uid, viewerUid)
+        .select([
+          'posts.uid as uid',
+          'posts.content as content',
+          'posts.imageUrl as imageUrl',
+          'posts.linkUrl as linkUrl',
+          'posts.linkText as linkText',
+          'posts.status as status',
+          'posts.created as created',
+          'posts.updated as updated'
+        ])
         // id breaks ties so posts created in the same instant keep a stable order across pages
-        .orderBy('created', 'desc')
-        .orderBy('id', 'desc')
+        .orderBy('posts.created', 'desc')
+        .orderBy('posts.id', 'desc')
         .limit(POSTS_PER_PAGE)
         .offset((page - 1) * POSTS_PER_PAGE)
         .execute(),
-      db
-        .selectFrom('posts')
+      profilePostsQuery(c, uid, viewerUid)
         .select((eb) => eb.fn.countAll<number>().as('total'))
-        .where('userUid', '=', uid)
-        .where('status', '=', 'published')
         .executeTakeFirst()
     ])
     const totalPosts = Number(postCount?.total ?? 0)

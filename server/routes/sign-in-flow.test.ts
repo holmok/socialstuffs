@@ -85,7 +85,7 @@ describe('POST /sign-in', () => {
     const user = await seedUser('ok', 'active')
     const res = await post('/sign-in', { email: user.email, password: PASSWORD })
     expect(res.status).toBe(303)
-    expect(res.headers.get('location')).toBe('/user')
+    expect(res.headers.get('location')).toBe('/')
 
     const cookie = authCookie(res)
     expect(cookie).toBeDefined()

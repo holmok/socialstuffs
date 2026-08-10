@@ -1,4 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import type { PostStatus } from '@data/post-data'
+import type { PostTargetType } from '@data/post-target-data'
 import normalizeEmail from 'normalize-email'
 import pino from 'pino'
 import LoadConfig from '@/config'
@@ -75,6 +77,27 @@ async function signIn(user: SeededUser): Promise<string> {
   return cookie.split(';')[0]
 }
 
+let postCounter = 0
+async function seedPost(author: SeededUser, name: string, audience: PostTargetType, status: PostStatus = 'published') {
+  postCounter += 1
+  const post = await db
+    .insertInto('posts')
+    .values({
+      uid: `prof-${postCounter}-${suffix}`,
+      userId: author.id,
+      userUid: author.uid,
+      content: `${name}-${suffix}`,
+      status
+    })
+    .returning(['id', 'uid'])
+    .executeTakeFirstOrThrow()
+  await db
+    .insertInto('postTargets')
+    .values({ postId: post.id, postUid: post.uid, userId: author.id, userUid: author.uid, type: audience })
+    .execute()
+  return post
+}
+
 function relationRow(userId: number, friendId: number) {
   return db
     .selectFrom('relations')
@@ -109,6 +132,7 @@ afterAll(async () => {
       .deleteFrom('favorites')
       .where((eb) => eb.or([eb('userId', 'in', ids), eb('friendId', 'in', ids)]))
       .execute()
+    await db.deleteFrom('postTargets').where('userId', 'in', ids).execute()
     await db.deleteFrom('posts').where('userId', 'in', ids).execute()
     await db.deleteFrom('users').where('id', 'in', ids).execute()
   }
@@ -201,6 +225,49 @@ describe('GET /profile/:uid', () => {
     const body = await (await get(`/profile/${target.uid}`, cookie)).text()
     expect(body).toContain(`published-${suffix}`)
     expect(body).not.toContain(`draft-${suffix}`)
+  })
+
+  test('your own profile lists every non-deleted post with its status after the date', async () => {
+    const user = await seedUser('psts')
+    await seedPost(user, 'own-pub', 'all', 'published')
+    await seedPost(user, 'own-draft', 'all', 'draft')
+    await seedPost(user, 'own-arch', 'all', 'archived')
+    await seedPost(user, 'own-del', 'all', 'deleted')
+    const cookie = await signIn(user)
+
+    const body = await (await get(`/profile/${user.uid}`, cookie)).text()
+    for (const name of ['own-pub', 'own-draft', 'own-arch']) expect(body).toContain(`${name}-${suffix}`)
+    expect(body).not.toContain(`own-del-${suffix}`)
+    expect(body).toContain('· published')
+    expect(body).toContain('· draft')
+    expect(body).toContain('· archived')
+  })
+
+  test("another person's profile only shows published posts whose audience includes you", async () => {
+    const viewer = await seedUser('pauv')
+    const owner = await seedUser('pauo')
+    // the owner favorited the viewer but also disapproved them (and never approved them)
+    await db
+      .insertInto('favorites')
+      .values({ userId: owner.id, userUid: owner.uid, friendId: viewer.id, friendUid: viewer.uid })
+      .execute()
+    await db
+      .insertInto('relations')
+      .values({ userId: owner.id, userUid: owner.uid, friendId: viewer.id, friendUid: viewer.uid, type: 'disapprove' })
+      .execute()
+
+    await seedPost(owner, 'aud-all', 'all')
+    await seedPost(owner, 'aud-fav', 'favorites') // visible: the owner favorited the viewer
+    await seedPost(owner, 'aud-app', 'approved') // hidden: the owner never approved the viewer
+    await seedPost(owner, 'aud-non', 'non_disapproved') // hidden: the owner disapproved the viewer
+    await seedPost(owner, 'aud-draft', 'all', 'draft') // hidden: not published
+    const cookie = await signIn(viewer)
+
+    const body = await (await get(`/profile/${owner.uid}`, cookie)).text()
+    for (const name of ['aud-all', 'aud-fav']) expect(body).toContain(`${name}-${suffix}`)
+    for (const name of ['aud-app', 'aud-non', 'aud-draft']) expect(body).not.toContain(`${name}-${suffix}`)
+    // status only shows on your own profile
+    expect(body).not.toContain('· published')
   })
 
   test('posts are paged five at a time via ?p=', async () => {

@@ -25,7 +25,7 @@ const Navigation = (props: NavigationProps) => {
         {isAuthenticated && (
           <>
             <li>
-              <a href="/user">User</a>
+              <a href="/user">My Stuff</a>
             </li>
             <li>
               <form method="post" action="/user/sign-out">

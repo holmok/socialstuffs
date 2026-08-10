@@ -180,7 +180,7 @@ describe('POST /posts/new — create', () => {
     expect(profile).not.toContain('(edited)')
   })
 
-  test('a draft is saved but not listed on the profile', async () => {
+  test('a draft is saved and listed on your own profile with its status', async () => {
     const user = await seedUser('ndft')
     const cookie = await signIn(user)
 
@@ -191,7 +191,8 @@ describe('POST /posts/new — create', () => {
     expect(rows[0].status).toBe('draft')
 
     const profile = await (await get(`/profile/${user.uid}`, cookie)).text()
-    expect(profile).not.toContain(`drafty-${suffix}`)
+    expect(profile).toContain(`drafty-${suffix}`)
+    expect(profile).toContain('· draft')
   })
 
   test('link url and text are stored and rendered on the profile', async () => {
@@ -400,7 +401,7 @@ describe('POST /posts/:uid/edit', () => {
     expect(uploadSpy.mock.calls.length).toBe(0)
   })
 
-  test('archiving removes the post from the profile but it stays editable', async () => {
+  test('an archived post stays on your own profile with its status and stays editable', async () => {
     const user = await seedUser('earc')
     const cookie = await signIn(user)
     const post = await createPost(cookie, user.id, { content: `archy-${suffix}` })
@@ -415,7 +416,8 @@ describe('POST /posts/:uid/edit', () => {
     const [row] = await postsFor(user.id)
     expect(row.status).toBe('archived')
     const profile = await (await get(`/profile/${user.uid}`, cookie)).text()
-    expect(profile).not.toContain(`archy-${suffix}`)
+    expect(profile).toContain(`archy-${suffix}`)
+    expect(profile).toContain('· archived')
 
     // still editable, with Archived selected; Draft is only offered while a post is a draft
     const editPage = await (await get(`/posts/${post.uid}/edit`, cookie)).text()
