@@ -3,7 +3,7 @@ import RecoverPasswordFailurePage from '@pages/recover-password-failure'
 import RecoverPasswordSetPage from '@pages/recover-password-set'
 import RecoverPasswordForm from '@templates/components/recover-password-form'
 import SetPasswordForm from '@templates/components/set-password-form'
-import type { Hono } from 'hono'
+import type { Context, Hono } from 'hono'
 import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
 import Uniquey from 'uniquey'
@@ -13,20 +13,10 @@ import * as utils from '@/utils'
 
 const tokenUniquey = new Uniquey({ length: 32 })
 
-const TOKEN_TTL_MS = 48 * 60 * 60 * 1000
-
-// same password rules as sign-up, plus a confirm-match refine
+// same password rules as sign-up (utils.passwordSchema), plus a confirm-match refine
 const setPasswordSchema = z
   .object({
-    password: z
-      .string()
-      .min(10, 'Password must be at least 10 characters long.')
-      .max(255, 'Password must be at most 255 characters long.')
-      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
-      .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
-      .regex(/[0-9]/, 'Password must contain at least one number.')
-      .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character.')
-      .regex(/^[^\s]*$/, 'Password must not contain spaces.'),
+    password: utils.passwordSchema,
     confirmPassword: z.string().min(1, 'Confirm Password is required.')
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -35,6 +25,18 @@ const setPasswordSchema = z
   })
 
 type SetPasswordData = z.infer<typeof setPasswordSchema>
+
+// HTMX failures re-render the set-password form fragment; no-JS failures re-render the full page
+// (mirrors the GET form). Password values are never echoed back
+function setPasswordError(c: Context, token: string, uid: string, errors: Record<string, string[]>, status?: 500) {
+  return utils.formErrorResponse(
+    c,
+    SetPasswordForm({ token, uid, errors }),
+    RecoverPasswordSetPage({ token, uid, errors }),
+    { title: 'Set a New Password', description: 'Choose a new password for your account.', styles: ['auth'] },
+    status
+  )
+}
 
 export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
   logger.info('Registering recover-password routes')
@@ -51,7 +53,17 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
     windowMs: 60 * 60 * 1000,
     max: 5,
     keyPrefix: 'recover-password',
-    onLimit: (c) => c.html(RecoverPasswordForm({ errors: { form: ['Too many attempts. Please try again later.'] } }))
+    // echo the typed email back so a 429 doesn't wipe the form (the limiter already set the 429 status)
+    onLimit: async (c) => {
+      const form = await utils.formStrings(c)
+      const errors = { form: ['Too many attempts. Please try again later.'] }
+      return utils.formErrorResponse(
+        c,
+        RecoverPasswordForm({ email: form.email, errors }),
+        RecoverPasswordPage({ email: form.email, errors }),
+        { title: 'Recover Password', description: 'Request a password reset link.', styles: ['auth'] }
+      )
+    }
   })
 
   app.post('/recover-password', recoverLimit, async (c) => {
@@ -147,7 +159,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
       } else if (tokenRow.claimed) {
         logger.warn({ uid }, 'Password reset token has already been claimed')
         invalidToken = true
-      } else if (Date.now() - tokenRow.created.getTime() > TOKEN_TTL_MS) {
+      } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
         logger.warn({ uid }, 'Password reset token has expired')
         invalidToken = true
       }
@@ -186,7 +198,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
 
     if (!result.success) {
       logger.warn({ errors: result.errors }, 'Validation errors on set-password form')
-      return c.html(SetPasswordForm({ token, uid, errors: result.errors }))
+      return setPasswordError(c, token, uid, result.errors)
     }
 
     const { data } = result
@@ -225,7 +237,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
       } else if (tokenRow.claimed) {
         logger.warn({ uid }, 'Password reset token has already been claimed')
         return failure()
-      } else if (Date.now() - tokenRow.created.getTime() > TOKEN_TTL_MS) {
+      } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
         logger.warn({ uid }, 'Password reset token has expired')
         return failure()
       }
@@ -240,7 +252,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
           .set({ claimed: new Date() })
           .where('token', '=', token)
           .where('claimed', 'is', null)
-          .where('created', '>', new Date(Date.now() - TOKEN_TTL_MS))
+          .where('created', '>', new Date(Date.now() - utils.TOKEN_TTL_MS))
           .returning('userId')
           .executeTakeFirst()
 
@@ -261,10 +273,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
       return utils.redirect(c, '/sign-in')
     } catch (error) {
       utils.logError(logger, error, 'Error resetting password')
-      return c.html(
-        SetPasswordForm({ token, uid, errors: { form: ['An unexpected error occurred. Please try again later.'] } }),
-        500
-      )
+      return setPasswordError(c, token, uid, { form: ['An unexpected error occurred. Please try again later.'] }, 500)
     }
   })
 }

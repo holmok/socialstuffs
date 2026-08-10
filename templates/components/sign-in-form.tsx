@@ -1,6 +1,6 @@
 import TextInput from './text-input'
 
-type SignInFormProps = {
+export type SignInFormProps = {
   email?: string
   password?: string
   errors?: Record<string, string[]>
