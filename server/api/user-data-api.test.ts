@@ -187,6 +187,23 @@ describe('downloadUserData', () => {
     expect(Buffer.from(entries['images/profile-abc.jpg'])).toEqual(Buffer.from([1, 2, 3, 4]))
   })
 
+  test('more images than the download concurrency all land in the zip (chunk boundary math)', async () => {
+    const user = await seedUser('dlmany')
+    // 9 images = two full chunks of IMAGE_DOWNLOAD_CONCURRENCY (4) plus a partial final chunk
+    bucketFiles = Array.from({ length: 9 }, (_, i) => ({
+      name: `${user.uid}/photo-${i}.jpg`,
+      contents: Buffer.from([i])
+    }))
+
+    await api.downloadUserData(user.uid)
+
+    expect(savedZips.length).toBe(1)
+    const entries = unzipSync(new Uint8Array(savedZips[0].data))
+    for (let i = 0; i < 9; i++) {
+      expect(Buffer.from(entries[`images/photo-${i}.jpg`])).toEqual(Buffer.from([i]))
+    }
+  })
+
   test('an unknown uid throws UserDataError and saves nothing', async () => {
     const err = await api.downloadUserData(`test-missing-${suffix}`).catch((e) => e)
     expect(err).toBeInstanceOf(UserDataError)
