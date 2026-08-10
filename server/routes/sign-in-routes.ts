@@ -17,10 +17,18 @@ const signInSchema = z.object({
 
 type SignInData = z.infer<typeof signInSchema>
 
+// where to land after sign-in: only same-site absolute paths survive — no protocol-relative
+// ('//evil.example') or schemed ('https://evil.example') values, so it can't open-redirect
+function safeNext(next: string | undefined): string | undefined {
+  if (next?.startsWith('/') && !next.startsWith('//') && !next.includes('://')) return next
+  return undefined
+}
+
 // HTMX failures re-render the form fragment; no-JS failures re-render the full page (mirrors GET /sign-in).
 // Only the email is echoed back — the password never is (password inputs don't render values)
-function signInError(c: Context, email: string | undefined, errors: Record<string, string[]>) {
-  return utils.formErrorResponse(c, SignInForm({ email, errors }), SignInPage({ email, errors }), {
+function signInError(c: Context, email: string | undefined, errors: Record<string, string[]>, next: string | undefined) {
+  const safe = safeNext(next)
+  return utils.formErrorResponse(c, SignInForm({ email, next: safe, errors }), SignInPage({ email, next: safe, errors }), {
     title: 'Sign in',
     description: 'Sign in to socialstuffs.',
     styles: ['auth']
@@ -31,7 +39,11 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
   logger.info('Registering sign-in routes')
 
   app.get('/sign-in', (c) => {
-    return c.render(SignInPage(), { title: 'Sign in', description: 'Sign in to socialstuffs.', styles: ['auth'] })
+    return c.render(SignInPage({ next: safeNext(c.req.query('next')) }), {
+      title: 'Sign in',
+      description: 'Sign in to socialstuffs.',
+      styles: ['auth']
+    })
   })
 
   const signInLimit = m.rateLimit({
@@ -41,7 +53,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
     // echo the typed email back so a 429 doesn't wipe the form (the limiter already set the 429 status)
     onLimit: async (c) => {
       const form = await utils.formStrings(c)
-      return signInError(c, form.email, { form: ['Too many attempts. Please try again later.'] })
+      return signInError(c, form.email, { form: ['Too many attempts. Please try again later.'] }, form.next)
     }
   })
 
@@ -57,7 +69,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
 
     if (!result.success) {
       c.var.logger.warn({ errors: result.errors }, 'Validation errors on sign-in form')
-      return signInError(c, form.email, result.errors)
+      return signInError(c, form.email, result.errors, form.next)
     } else {
       const { data } = result
       const { db, logger, auth, flash } = c.var
@@ -68,7 +80,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         if (await acctLimit.isBlocked(db, normalizedEmail)) {
           logger.warn('Per-account sign-in failure limit exceeded')
           c.status(429)
-          return signInError(c, data.email, { form: ['Too many attempts. Please try again later.'] })
+          return signInError(c, data.email, { form: ['Too many attempts. Please try again later.'] }, form.next)
         }
 
         const user = await db.selectFrom('users').where('normalizedEmail', '=', normalizedEmail).selectAll().executeTakeFirst()
@@ -77,7 +89,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
           await Bun.password.verify(data.password, DUMMY_HASH, 'bcrypt')
           await acctLimit.recordFailure(db, normalizedEmail)
           logger.warn('User not found for sign-in')
-          return signInError(c, data.email, { form: ['Invalid sign in.'] })
+          return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
         }
 
         const isPasswordValid = await Bun.password.verify(data.password, user.passwordHash, 'bcrypt')
@@ -85,21 +97,24 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         if (!isPasswordValid) {
           await acctLimit.recordFailure(db, normalizedEmail)
           logger.warn({ userId: user.id }, 'Invalid password for sign-in')
-          return signInError(c, data.email, { form: ['Invalid sign in.'] })
+          return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
         }
 
         if (user.status === 'pending') {
           // correct password — a stuck-mid-validation user retrying is not a credential failure
           logger.warn({ userId: user.id }, 'Sign-in attempt for pending account')
-          return signInError(c, data.email, {
-            form: ['Please validate your email address before signing in. Need a new link? Use "Resend it" below.']
-          })
+          return signInError(
+            c,
+            data.email,
+            { form: ['Please validate your email address before signing in. Need a new link? Use "Resend it" below.'] },
+            form.next
+          )
         }
 
         if (user.status !== 'active') {
           await acctLimit.recordFailure(db, normalizedEmail)
           logger.warn({ userId: user.id, status: user.status }, 'Sign-in attempt for non-active account')
-          return signInError(c, data.email, { form: ['Invalid sign in.'] })
+          return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
         }
 
         await acctLimit.clear(db, normalizedEmail)
@@ -115,10 +130,10 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         logger.info({ userId: user.id }, 'User signed in successfully')
 
         await flash.addFlash('success', 'You have signed in successfully.')
-        return utils.redirect(c, '/')
+        return utils.redirect(c, safeNext(form.next) ?? '/')
       } catch (error) {
         utils.logError(logger, error, 'Error during sign-in')
-        return signInError(c, data.email, { form: ['An unexpected error occurred. Please try again later.'] })
+        return signInError(c, data.email, { form: ['An unexpected error occurred. Please try again later.'] }, form.next)
       }
     }
   })
