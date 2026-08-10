@@ -224,3 +224,44 @@ describe('GET /', () => {
     expect(page2).not.toContain('?p=3')
   })
 })
+
+describe('discover CTA on the home feed', () => {
+  test('a user with no favorites or approvals sees the CTA pointing at /discover', async () => {
+    const viewer = await seedUser('ctanew')
+    const cookie = await signIn(viewer)
+
+    const body = await (await get('/', cookie)).text()
+    expect(body).toContain('class="feed-cta"')
+    expect(body).toContain('href="/discover"')
+  })
+
+  test('having a favorite hides the CTA', async () => {
+    const viewer = await seedUser('ctafav')
+    const other = await seedUser('ctafo')
+    await favorite(viewer, other)
+    const cookie = await signIn(viewer)
+
+    const body = await (await get('/', cookie)).text()
+    expect(body).not.toContain('class="feed-cta"')
+  })
+
+  test('having an approval hides the CTA', async () => {
+    const viewer = await seedUser('ctaapp')
+    const other = await seedUser('ctaao')
+    await relate(viewer, other, 'approve')
+    const cookie = await signIn(viewer)
+
+    const body = await (await get('/', cookie)).text()
+    expect(body).not.toContain('class="feed-cta"')
+  })
+
+  test('a disapproval alone does not hide the CTA — it adds nothing to the feed', async () => {
+    const viewer = await seedUser('ctadis')
+    const other = await seedUser('ctado')
+    await relate(viewer, other, 'disapprove')
+    const cookie = await signIn(viewer)
+
+    const body = await (await get('/', cookie)).text()
+    expect(body).toContain('class="feed-cta"')
+  })
+})
