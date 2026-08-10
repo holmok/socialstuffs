@@ -76,7 +76,7 @@ const UserSettingsForm = (props: UserSettingsFormProps) => {
         autocomplete="new-password"
       />
       <button type="submit">Save Changes</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
     </form>

@@ -36,7 +36,7 @@ const RecoverPasswordForm = (props: RecoverPasswordFormProps) => {
         required
       />
       <button type="submit">Send Reset Link</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
       <p className="form-alt">

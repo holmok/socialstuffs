@@ -37,7 +37,7 @@ const UserDataPage = ({ lastExportUrl }: UserDataPageProps) => {
           <button type="submit" className="primary-button">
             Generate Your Data Export
           </button>
-          <span className="form-indicator" aria-hidden="true">
+          <span className="form-indicator" aria-live="polite">
             Working…
           </span>
         </form>
