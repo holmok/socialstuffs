@@ -1,21 +1,20 @@
-// One-off dev seeding: creates fake users, posts (with audience targets), relations, and favorites.
-// Run with: bun run scripts/seed-fake-data.ts
+// One-off dev seeding: creates fake users, posts (with audience targets), comments, relations,
+// and favorites. Run with: bun run scripts/seed-fake-data.ts
 // All users get the password below so you can log in as any of them.
+// Rows are written directly through Kysely (mirroring the flow tests), so seeding needs no
+// Google credentials and skips the moderation pipeline the real routes run.
 // Everything created is recorded in scripts/seeded-data.json (merged across reruns) so
 // scripts/unseed-fake-data.ts can hard-delete it later.
 
-import CommentAPI from '@api/comments-api'
-import GetDatabase from '@api/data'
-import FavoritesAPI, { MAX_FAVORITES } from '@api/favorites-api'
-import PostAPI from '@api/post-api'
-import PostTargetAPI, { type PostTargetType } from '@api/post-target-api'
-import RelationsAPI from '@api/relations-api'
-import UserAPI, { UserError } from '@api/user-api'
+import getDatabase, { type PostTargetType } from '@data/index'
+import normalizeEmail from 'normalize-email'
 import pino from 'pino'
-import { loadConfig } from '@/config'
+import Uniquey from 'uniquey'
+import LoadConfig from '@/config'
 import { emptyManifest, MANIFEST_PATH, readManifest, type SeedManifest } from './seed-manifest'
 
 const PASSWORD = 'Password123!'
+const MAX_SEED_FAVORITES = 5
 
 const PEOPLE = [
   { username: 'maya_torres', fullName: 'Maya Torres', bio: 'Plant hoarder. If it photosynthesizes, I own it.' },
@@ -112,116 +111,114 @@ function shuffle<T>(arr: readonly T[]): T[] {
   return copy
 }
 
-const config = loadConfig()
+const config = LoadConfig()
 const logger = pino({ level: 'warn' })
-const db = GetDatabase(config.poolConfig, config.dbSchema, logger)
-const userAPI = new UserAPI(db, logger)
-const postAPI = new PostAPI(db, logger)
-const commentAPI = new CommentAPI(db, logger)
-const postTargetAPI = new PostTargetAPI(db, logger)
-const relationsAPI = new RelationsAPI(db, logger)
-const favoritesAPI = new FavoritesAPI(db, logger)
+const db = getDatabase(config.poolConfig, config.dbSchema, logger)
+const uniquey = new Uniquey() // short by design: public uid, not a secret
 
 type Seeded = { id: number; uid: string; username: string; fullName: string; bio: string }
 
 const manifest: SeedManifest = emptyManifest()
 
 try {
-  // 1. Users
+  // 1. Users — reruns skip usernames that already exist
   const seeded: Seeded[] = []
+  const passwordHash = await Bun.password.hash(PASSWORD, { algorithm: 'bcrypt', cost: 10 })
   for (const person of PEOPLE) {
     const email = `${person.username.replaceAll(/\W+/g, '.')}@example.com`
-    try {
-      const user = await userAPI.createUser({ email, username: person.username, password: PASSWORD })
-      seeded.push({ id: user.id, uid: user.uid, ...person })
-      manifest.users.push({ uid: user.uid, username: person.username, email })
-    } catch (err) {
-      if (err instanceof UserError) {
-        console.log(`skipping ${person.username} (already exists)`)
-        continue
-      }
-      throw err
+    const normalizedUsername = person.username.toLowerCase()
+    const existing = await db
+      .selectFrom('users')
+      .select(['id'])
+      .where('normalizedUsername', '=', normalizedUsername)
+      .executeTakeFirst()
+    if (existing != null) {
+      console.log(`skipping ${person.username} (already exists)`)
+      continue
     }
+    const user = await db
+      .insertInto('users')
+      .values({
+        uid: uniquey.create(),
+        username: person.username,
+        normalizedUsername,
+        email,
+        normalizedEmail: normalizeEmail(email),
+        passwordHash
+      })
+      .returning(['id', 'uid'])
+      .executeTakeFirstOrThrow()
+    // status and info are not insertable; activate the account and write profile info via update
+    await db
+      .updateTable('users')
+      .set({ status: 'active', info: { fullname: person.fullName, bio: person.bio } })
+      .where('id', '=', user.id)
+      .execute()
+    seeded.push({ id: user.id, uid: user.uid, ...person })
+    manifest.users.push({ uid: user.uid, username: person.username, email })
   }
   console.log(`created ${seeded.length} users`)
 
-  // 2. Posts
-  const publishedPostUids: string[] = []
+  // 2. Posts with their audience rows
+  const publishedPosts: { id: number; uid: string }[] = []
   for (const user of seeded) {
     const n = randInt(2, 5)
-    const texts = shuffle(POST_TEXTS).slice(0, n)
-    for (const content of texts) {
+    for (const content of shuffle(POST_TEXTS).slice(0, n)) {
       const withLink = Math.random() < 0.3 ? pick(LINKS) : {}
       const status = Math.random() < 0.85 ? ('published' as const) : ('draft' as const)
-      const post = await postAPI.createPost({
-        userUid: user.uid,
-        userId: user.id,
-        content,
-        status,
-        ...withLink
-      })
-      if (post == null) continue
-      const target: PostTargetType =
-        Math.random() < 0.7 ? 'all' : pick(['favorites', 'approved', 'non_disapproved'] as const)
-      await postTargetAPI.createPostTarget(user.uid, post.uid, target)
+      const post = await db
+        .insertInto('posts')
+        .values({ uid: uniquey.create(), userId: user.id, userUid: user.uid, content, status, ...withLink })
+        .returning(['id', 'uid'])
+        .executeTakeFirstOrThrow()
+      const target: PostTargetType = Math.random() < 0.7 ? 'all' : pick(['favorites', 'approved', 'non_disapproved'] as const)
+      await db
+        .insertInto('postTargets')
+        .values({ postId: post.id, postUid: post.uid, userId: user.id, userUid: user.uid, type: target })
+        .execute()
       manifest.posts.push(post.uid)
-      if (status === 'published') publishedPostUids.push(post.uid)
+      if (status === 'published') publishedPosts.push(post)
     }
   }
   console.log(`created ${manifest.posts.length} posts`)
 
   // 2b. Comments on published posts, from random seeded users
-  for (const postUid of publishedPostUids) {
-    const commenters = shuffle(seeded).slice(0, randInt(0, 4))
-    for (const commenter of commenters) {
-      const comment = await commentAPI.createComment({
-        postUid,
-        userUid: commenter.uid,
-        userId: commenter.id,
-        content: pick(COMMENT_TEXTS)
-      })
-      if (comment != null) manifest.comments.push(comment.uid)
+  for (const post of publishedPosts) {
+    for (const commenter of shuffle(seeded).slice(0, randInt(0, 4))) {
+      const uid = uniquey.create()
+      await db
+        .insertInto('comments')
+        .values({ uid, postId: post.id, userId: commenter.id, userUid: commenter.uid, content: pick(COMMENT_TEXTS) })
+        .execute()
+      manifest.comments.push(uid)
     }
   }
   console.log(`created ${manifest.comments.length} comments`)
 
-  // 3. Relations + favorites, tracking the denormalized info lists per user
+  // 3. Relations + favorites
   for (const user of seeded) {
-    const approved: string[] = []
-    const disapproved: string[] = []
-    const others = shuffle(seeded.filter((u) => u.id !== user.id)).slice(0, randInt(4, 10))
-    for (const friend of others) {
-      const status = Math.random() < 0.8 ? 'approve' : 'disapprove'
-      await relationsAPI.createRelation(user.uid, friend.uid, status)
+    const others = seeded.filter((u) => u.id !== user.id)
+    for (const friend of shuffle(others).slice(0, randInt(4, 10))) {
+      const type = Math.random() < 0.8 ? ('approve' as const) : ('disapprove' as const)
+      await db
+        .insertInto('relations')
+        .values({ userId: user.id, userUid: user.uid, friendId: friend.id, friendUid: friend.uid, type })
+        .execute()
       manifest.relations.push({ userUid: user.uid, friendUid: friend.uid })
-      if (status === 'approve') approved.push(friend.uid)
-      else disapproved.push(friend.uid)
     }
-
-    const favoriteUids: string[] = []
     if (Math.random() < 0.7) {
-      const picks = shuffle(seeded.filter((u) => u.id !== user.id)).slice(0, randInt(2, MAX_FAVORITES))
-      for (const friend of picks) {
-        await favoritesAPI.addFavorite(user.uid, friend.uid)
+      for (const friend of shuffle(others).slice(0, randInt(2, MAX_SEED_FAVORITES))) {
+        await db
+          .insertInto('favorites')
+          .values({ userId: user.id, userUid: user.uid, friendId: friend.id, friendUid: friend.uid })
+          .execute()
         manifest.favorites.push({ userUid: user.uid, friendUid: friend.uid })
-        favoriteUids.push(friend.uid)
       }
     }
-
-    // 4. Activate the account and write profile info + the denormalized uid lists
-    await userAPI.updateUser(user.uid, {
-      status: 'active',
-      info: {
-        fullName: user.fullName,
-        bio: user.bio,
-        relations: { approved, disapproved },
-        favorites: favoriteUids
-      }
-    })
   }
   console.log(`created ${manifest.relations.length} relations and ${manifest.favorites.length} favorites`)
 
-  // 5. Record what was created so unseed-fake-data.ts can hard-delete it. Merge with any
+  // 4. Record what was created so unseed-fake-data.ts can hard-delete it. Merge with any
   // earlier manifest so reruns (which skip existing usernames) don't lose prior entries.
   const previous = await readManifest()
   if (previous != null) {

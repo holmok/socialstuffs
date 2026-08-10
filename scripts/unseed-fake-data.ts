@@ -6,9 +6,9 @@
 // The sub-APIs deliberately expose no hard deletes, so this dev-only script uses Kysely directly.
 
 import { unlink } from 'node:fs/promises'
-import GetDatabase from '@api/data'
+import getDatabase from '@data/index'
 import pino from 'pino'
-import { loadConfig } from '@/config'
+import LoadConfig from '@/config'
 import { MANIFEST_PATH, readManifest } from './seed-manifest'
 
 const manifest = await readManifest()
@@ -24,9 +24,9 @@ if (userUids.length === 0) {
   process.exit(0)
 }
 
-const config = loadConfig()
+const config = LoadConfig()
 const logger = pino({ level: 'warn' })
-const db = GetDatabase(config.poolConfig, config.dbSchema, logger)
+const db = getDatabase(config.poolConfig, config.dbSchema, logger)
 
 try {
   // Deleting by seeded-user uid (not just the recorded rows) so nothing is left dangling
@@ -53,14 +53,8 @@ try {
     .where((eb) => eb.or([eb('userUid', 'in', userUids), eb('friendUid', 'in', userUids)]))
     .executeTakeFirst()
   const posts = await db.deleteFrom('posts').where('userUid', 'in', userUids).executeTakeFirst()
-  const validationTokens = await db
-    .deleteFrom('accountValidationTokens')
-    .where('userId', 'in', seededIds)
-    .executeTakeFirst()
-  const recoveryTokens = await db
-    .deleteFrom('passwordRecoveryTokens')
-    .where('userId', 'in', seededIds)
-    .executeTakeFirst()
+  const validationTokens = await db.deleteFrom('accountValidationTokens').where('userId', 'in', seededIds).executeTakeFirst()
+  const recoveryTokens = await db.deleteFrom('passwordRecoveryTokens').where('userId', 'in', seededIds).executeTakeFirst()
   const users = await db.deleteFrom('users').where('uid', 'in', userUids).executeTakeFirst()
 
   console.log(`deleted ${comments.numDeletedRows} comments`)

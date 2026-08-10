@@ -1,0 +1,59 @@
+# socialstuffs environment configuration
+#
+# Copy this file to .env and fill in real values:
+#   cp .example_env .env
+# Bun loads .env automatically (it is gitignored). Values shown for optional
+# variables are the built-in defaults; leave them commented out unless you
+# need to change them.
+
+# ── Database (required) ──────────────────────────────────────────────────────
+# Postgres connection string and the schema the app lives in.
+# Create/update the tables with: bun run migrate
+DATABASE_URL=postgres://user:pass@localhost:5432/socialstuffs
+DATABASE_SCHEMA=socialstuffs
+# Connection pool sizing
+# DATABASE_MIN_CLIENTS=1
+# DATABASE_MAX_CLIENTS=10
+
+# ── Server (required) ────────────────────────────────────────────────────────
+# Note: `bun run dev` / `bun run start` / `bun test` override NODE_ENV.
+PORT=3000
+HOST=localhost
+NODE_ENV=development       # development | production | test
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Name stamped on every log line (required).
+LOG_NAME=socialstuffs
+# Development always pretty-prints at debug level; LOG_LEVEL applies in production.
+# LOG_LEVEL=info           # debug | info | warn | error
+# Axiom (required): production logs also ship to this dataset — https://axiom.co
+AXIOM_DATASET=your-axiom-dataset
+AXIOM_TOKEN=xaat-your-axiom-token
+
+# ── Email (required) ─────────────────────────────────────────────────────────
+# Postmark server token for transactional email (account validation, password
+# recovery) and the address those emails are sent from.
+POSTMARK_TOKEN=your-postmark-server-token
+FROM_EMAIL=no-reply@example.com
+# Base URL used to build the links inside those emails (required)
+BASE_LINK_URL=http://localhost:3000
+
+# ── Images & moderation (required) ───────────────────────────────────────────
+# Google Cloud Storage bucket that uploaded images (posts, avatars) land in.
+# The Google clients — Storage, Vision SafeSearch (image moderation), and
+# Natural Language (text moderation) — authenticate via Application Default
+# Credentials: run `gcloud auth application-default login`, or point
+# GOOGLE_APPLICATION_CREDENTIALS at a service-account key file.
+IMAGE_BUCKET=your-gcs-bucket
+# Public base URL images are served from (required)
+BASE_IMAGE_URL=https://storage.googleapis.com/your-gcs-bucket
+# GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+
+# ── Auth & cookies (required) ────────────────────────────────────────────────
+# Long random strings — JWT_SECRET signs the auth JWTs, COOKIE_SECRET signs
+# the cookies they ride in. Generate with e.g.: openssl rand -hex 32
+JWT_SECRET=change-me-long-random-string
+COOKIE_SECRET=change-me-another-long-random-string
+# Names of the auth-JWT cookie and the session-id cookie
+COOKIE_NAME_USER=ss_user
+COOKIE_NAME_SESSION=ss_session

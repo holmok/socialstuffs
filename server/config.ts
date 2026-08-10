@@ -2,14 +2,12 @@ import type { PoolConfig } from 'pg'
 import type pino from 'pino'
 import { z } from 'zod'
 
-const APP_NAME = 'socialstuffs'
-
 export const envSchema = z.object({
-  PORT: z.coerce.number().int().positive().default(3000),
-  HOST: z.string().default('localhost'),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.coerce.number().int().positive(),
+  HOST: z.string().min(1),
+  NODE_ENV: z.enum(['development', 'production', 'test']),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  LOG_NAME: z.string().default(APP_NAME),
+  LOG_NAME: z.string().min(1),
   DATABASE_URL: z.url(),
   DATABASE_SCHEMA: z.string().min(1),
   DATABASE_MAX_CLIENTS: z.coerce.number().int().positive().default(10),
@@ -18,8 +16,8 @@ export const envSchema = z.object({
   AXIOM_TOKEN: z.string().min(1),
   POSTMARK_TOKEN: z.string().min(1),
   FROM_EMAIL: z.email(),
-  BASE_LINK_URL: z.url().default('http://localhost:3000'),
-  BASE_IMAGE_URL: z.url().default('https://storage.googleapis.com/social-stuffs-images'),
+  BASE_LINK_URL: z.url(),
+  BASE_IMAGE_URL: z.url(),
   IMAGE_BUCKET: z.string().min(1),
   JWT_SECRET: z.string().min(1),
   COOKIE_SECRET: z.string().min(1),
