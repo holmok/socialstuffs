@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import type { Logger } from 'pino'
+import DiscoverRoutes from './discover-routes'
 import PostRoutes from './post-routes'
 import ProfileRoutes from './profile-routes'
 import PublicRoutes from './public-routes'
@@ -16,5 +17,6 @@ export default function Routes(app: Hono, logger: Logger) {
   RecoverPasswordRoutes(app, logger)
   ProfileRoutes(app, logger)
   PostRoutes(app, logger)
+  DiscoverRoutes(app, logger)
   UserRoutes(app, logger)
 }
