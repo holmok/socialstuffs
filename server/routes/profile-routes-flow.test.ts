@@ -428,3 +428,123 @@ describe('POST /profile/:uid/favorite', () => {
     expect(body).toContain('…and more')
   })
 })
+
+// bulk-seeds users who never sign in (no bcrypt) as relationship targets for the cap tests;
+// the suffix in username/email keys them into the suite's afterAll cleanup
+async function seedFillerUsers(prefix: string, count: number) {
+  return await db
+    .insertInto('users')
+    .values(
+      Array.from({ length: count }, (_, i) => {
+        const username = `u${prefix}${i}${suffix}`.slice(0, 15)
+        return {
+          uid: `test-${prefix}${i}-${suffix}`,
+          username,
+          normalizedUsername: username.toLowerCase(),
+          email: `${prefix}${i}-${suffix}@example.com`,
+          normalizedEmail: `${prefix}${i}-${suffix}@example.com`,
+          passwordHash: 'not-a-real-hash'
+        }
+      })
+    )
+    .returning(['id', 'uid'])
+    .execute()
+}
+
+describe('relationship caps', () => {
+  test('favorites cap at 10: the 11th is rejected, clearing works at the cap and frees a slot', async () => {
+    const viewer = await seedUser('cfav')
+    const tenth = await seedUser('cfa')
+    const eleventh = await seedUser('cfb')
+    const fillers = await seedFillerUsers('fvx', 9)
+    await db
+      .insertInto('favorites')
+      .values(fillers.map((f) => ({ userId: viewer.id, userUid: viewer.uid, friendId: f.id, friendUid: f.uid })))
+      .execute()
+    const cookie = await signIn(viewer)
+
+    // the 10th favorite lands
+    expect((await post(`/profile/${tenth.uid}/favorite`, cookie)).status).toBe(303)
+
+    // the 11th is rejected and writes nothing
+    const rejected = await post(`/profile/${eleventh.uid}/favorite`, cookie)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.text()).toContain('You can favorite at most 10 people.')
+    expect(await favoriteRow(viewer.id, eleventh.id)).toBeUndefined()
+
+    // clearing at the cap is never blocked, and frees a slot for the previously rejected target
+    expect((await post(`/profile/${tenth.uid}/favorite`, cookie)).status).toBe(303)
+    expect(await favoriteRow(viewer.id, tenth.id)).toBeUndefined()
+    expect((await post(`/profile/${eleventh.uid}/favorite`, cookie)).status).toBe(303)
+    expect(await favoriteRow(viewer.id, eleventh.id)).toBeDefined()
+  })
+
+  test('approvals cap at 50: adding and switching into a full type are rejected, the other type still works', async () => {
+    const viewer = await seedUser('capr')
+    const fiftieth = await seedUser('cpa')
+    const extra = await seedUser('cpb')
+    const fillers = await seedFillerUsers('apx', 49)
+    await db
+      .insertInto('relations')
+      .values(
+        fillers.map((f) => ({
+          userId: viewer.id,
+          userUid: viewer.uid,
+          friendId: f.id,
+          friendUid: f.uid,
+          type: 'approve' as const
+        }))
+      )
+      .execute()
+    const cookie = await signIn(viewer)
+
+    // the 50th approval lands
+    expect((await post(`/profile/${fiftieth.uid}/approve`, cookie)).status).toBe(303)
+
+    // the 51st is rejected and writes nothing
+    const rejected = await post(`/profile/${extra.uid}/approve`, cookie)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.text()).toContain('You can approve at most 50 people.')
+    expect(await relationRow(viewer.id, extra.id)).toBeUndefined()
+
+    // the disapprove cap is separate: disapproving still works
+    expect((await post(`/profile/${extra.uid}/disapprove`, cookie)).status).toBe(303)
+    expect((await relationRow(viewer.id, extra.id))?.type).toBe('disapprove')
+
+    // switching disapprove -> approve also counts against the full approve cap and is rejected
+    const switched = await post(`/profile/${extra.uid}/approve`, cookie)
+    expect(switched.status).toBe(400)
+    expect((await relationRow(viewer.id, extra.id))?.type).toBe('disapprove')
+
+    // clearing an approval at the cap is never blocked
+    expect((await post(`/profile/${fiftieth.uid}/approve`, cookie)).status).toBe(303)
+    expect(await relationRow(viewer.id, fiftieth.id)).toBeUndefined()
+  })
+
+  test('disapprovals cap at 50 independently', async () => {
+    const viewer = await seedUser('cdis')
+    const extra = await seedUser('cda')
+    const fillers = await seedFillerUsers('dpx', 50)
+    await db
+      .insertInto('relations')
+      .values(
+        fillers.map((f) => ({
+          userId: viewer.id,
+          userUid: viewer.uid,
+          friendId: f.id,
+          friendUid: f.uid,
+          type: 'disapprove' as const
+        }))
+      )
+      .execute()
+    const cookie = await signIn(viewer)
+
+    const rejected = await post(`/profile/${extra.uid}/disapprove`, cookie)
+    expect(rejected.status).toBe(400)
+    expect(await rejected.text()).toContain('You can disapprove at most 50 people.')
+    expect(await relationRow(viewer.id, extra.id)).toBeUndefined()
+
+    // approving is unaffected by the full disapprove list
+    expect((await post(`/profile/${extra.uid}/approve`, cookie)).status).toBe(303)
+  })
+})
