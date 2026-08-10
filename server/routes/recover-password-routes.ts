@@ -10,8 +10,18 @@ import Uniquey from 'uniquey'
 import { z } from 'zod'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
+import { checkToken, claimToken, type TokenCheckFailure } from './token-helpers'
 
 const tokenUniquey = new Uniquey({ length: 32 })
+
+// per-reason log messages for the shared checkToken helper, used by both the GET form and the
+// POST reset (this route keeps its own wording)
+const resetFailureLog: Record<TokenCheckFailure, string> = {
+  missing: 'Password reset invalid token',
+  uidMismatch: 'Password reset token does not match user',
+  claimed: 'Password reset token has already been claimed',
+  expired: 'Password reset token has expired'
+}
 
 // same password rules as sign-up (utils.passwordSchema), plus a confirm-match refine
 const setPasswordSchema = z
@@ -136,35 +146,10 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
     const { db, logger } = c.var
 
     try {
-      const tokenRow = await db
-        .selectFrom('passwordRecoveryTokens')
-        .innerJoin('users', 'users.id', 'passwordRecoveryTokens.userId')
-        .where('passwordRecoveryTokens.token', '=', token)
-        .select([
-          'passwordRecoveryTokens.userId',
-          'passwordRecoveryTokens.claimed',
-          'passwordRecoveryTokens.created',
-          'users.uid as userUid'
-        ])
-        .executeTakeFirst()
+      const check = await checkToken(db, 'passwordRecoveryTokens', token, uid, utils.TOKEN_TTL_MS)
 
-      let invalidToken = false
-
-      if (!tokenRow) {
-        logger.warn({ uid }, 'Password reset invalid token')
-        invalidToken = true
-      } else if (tokenRow.userUid !== uid) {
-        logger.warn({ uid }, 'Password reset token does not match user')
-        invalidToken = true
-      } else if (tokenRow.claimed) {
-        logger.warn({ uid }, 'Password reset token has already been claimed')
-        invalidToken = true
-      } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
-        logger.warn({ uid }, 'Password reset token has expired')
-        invalidToken = true
-      }
-
-      if (invalidToken) {
+      if (!check.ok) {
+        logger.warn({ uid }, resetFailureLog[check.reason])
         c.status(400)
         return c.render(RecoverPasswordFailurePage({ message: 'The password reset link is invalid or has expired.' }), {
           title: 'Password Reset Failure',
@@ -213,48 +198,18 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
     }
 
     try {
-      // validate BEFORE claiming (mirrors validate-account): reject missing / uid-mismatch /
-      // already-claimed / expired. uid and created are immutable so pre-checking them is TOCTOU-free;
-      // only `claimed` races, and the atomic claim below (with a freshness predicate) handles that.
-      const tokenRow = await db
-        .selectFrom('passwordRecoveryTokens')
-        .innerJoin('users', 'users.id', 'passwordRecoveryTokens.userId')
-        .where('passwordRecoveryTokens.token', '=', token)
-        .select([
-          'passwordRecoveryTokens.userId',
-          'passwordRecoveryTokens.claimed',
-          'passwordRecoveryTokens.created',
-          'users.uid as userUid'
-        ])
-        .executeTakeFirst()
+      const check = await checkToken(db, 'passwordRecoveryTokens', token, uid, utils.TOKEN_TTL_MS)
 
-      if (!tokenRow) {
-        logger.warn({ uid }, 'Password reset invalid token')
-        return failure()
-      } else if (tokenRow.userUid !== uid) {
-        logger.warn({ uid }, 'Password reset token does not match user')
-        return failure()
-      } else if (tokenRow.claimed) {
-        logger.warn({ uid }, 'Password reset token has already been claimed')
-        return failure()
-      } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
-        logger.warn({ uid }, 'Password reset token has expired')
+      if (!check.ok) {
+        logger.warn({ uid }, resetFailureLog[check.reason])
         return failure()
       }
 
       const passwordHash = await Bun.password.hash(data.password, { algorithm: 'bcrypt', cost: 10 })
 
-      // atomically claim the single-use token AND update the password in one transaction; the
-      // freshness predicate keeps expiry race-safe alongside the `claimed is null` single-use guard
+      // atomically claim the single-use token AND update the password in one transaction
       const claimed = await db.transaction().execute(async (trx) => {
-        const claim = await trx
-          .updateTable('passwordRecoveryTokens')
-          .set({ claimed: new Date() })
-          .where('token', '=', token)
-          .where('claimed', 'is', null)
-          .where('created', '>', new Date(Date.now() - utils.TOKEN_TTL_MS))
-          .returning('userId')
-          .executeTakeFirst()
+        const claim = await claimToken(trx, 'passwordRecoveryTokens', token, utils.TOKEN_TTL_MS)
 
         if (!claim) return false
 
