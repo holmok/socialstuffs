@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import type { UserStatus } from '@data/user-data'
 import { Hono } from 'hono'
 import { getSignedCookie } from 'hono/cookie'
@@ -205,6 +205,28 @@ describe('no-JS and HTMX error rendering', () => {
     const body = await res.text()
     expect(body).toContain('Password is required.')
     expect(body).not.toContain('<title>')
+  })
+
+  test('an unexpected throw surfaces via the errorHandler (OOB flash, 500) instead of an in-form message', async () => {
+    // force the handler's first db query to throw so the request hits the errorHandler
+    const selectFromSpy = spyOn(db, 'selectFrom').mockImplementation(() => {
+      throw new Error('forced sign-in failure')
+    })
+    try {
+      const res = await post(
+        '/sign-in',
+        { email: `boom-${suffix}@example.com`, password: 'Whatever99!x' },
+        { 'HX-Request': 'true' }
+      )
+      expect(res.status).toBe(500)
+      expect(res.headers.get('HX-Reswap')).toBe('none')
+      const body = await res.text()
+      expect(body).toContain('hx-swap-oob')
+      // the old catch-all rendered this in-form; unexpected errors no longer do
+      expect(body).not.toContain('An unexpected error occurred')
+    } finally {
+      selectFromSpy.mockRestore()
+    }
   })
 
   test('a per-IP 429 keeps the typed email in the re-rendered form', async () => {

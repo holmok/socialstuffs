@@ -56,14 +56,12 @@ type SignUpData = z.infer<typeof signUpSchema>
 
 // HTMX failures re-render the form fragment; no-JS failures re-render the full page (mirrors GET /sign-up).
 // Password values are never rendered by the form (password inputs don't render values)
-function signUpError(c: Context, values: SignUpFormProps, errors: Record<string, string[]>, status?: 500) {
-  return utils.formErrorResponse(
-    c,
-    SignUpForm({ ...values, errors }),
-    SignUpPage({ ...values, errors }),
-    { title: 'Sign Up', description: 'Create an account for socialstuffs.', styles: ['auth'] },
-    status
-  )
+function signUpError(c: Context, values: SignUpFormProps, errors: Record<string, string[]>) {
+  return utils.formErrorResponse(c, SignUpForm({ ...values, errors }), SignUpPage({ ...values, errors }), {
+    title: 'Sign Up',
+    description: 'Create an account for socialstuffs.',
+    styles: ['auth']
+  })
 }
 
 export default function SignUpRoutes(app: Hono, logger: Logger) {
@@ -85,8 +83,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
   })
 
   app.post('/sign-up', signUpLimit, async (c) => {
-    const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const form = await utils.formStrings(c)
     const result = utils.validateFormData<SignUpData>(form, signUpSchema)
 
     const { db, logger, api, config, flash } = c.var
@@ -126,49 +123,48 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
       return signUpError(c, data, errors)
     }
 
+    const passwordHash = await Bun.password.hash(data.password, {
+      algorithm: 'bcrypt',
+      cost: 10
+    })
+
+    // No catch-all: in-form errors are reserved for expected validation states (handled above);
+    // unexpected throws — including a unique-violation race past the pre-check — go to the
+    // errorHandler (OOB flash for HTMX, styled error page for no-JS)
+    // create the user and its validation token atomically
+    const { user, token } = await db.transaction().execute(async (trx) => {
+      const user = await trx
+        .insertInto('users')
+        .values({
+          uid: uniquey.create(),
+          username: data.username,
+          normalizedUsername,
+          email: data.email,
+          normalizedEmail,
+          passwordHash
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
+      const token = tokenUniquey.create()
+      await trx.insertInto('accountValidationTokens').values({ token, userId: user.id }).execute()
+
+      return { user, token }
+    })
+
+    // deliberate catch: the account exists now, so a failed email send is non-fatal — log it and
+    // tell the user they can request a new link
     try {
-      const passwordHash = await Bun.password.hash(data.password, {
-        algorithm: 'bcrypt',
-        cost: 10
-      })
-
-      // create the user and its validation token atomically
-      const { user, token } = await db.transaction().execute(async (trx) => {
-        const user = await trx
-          .insertInto('users')
-          .values({
-            uid: uniquey.create(),
-            username: data.username,
-            normalizedUsername,
-            email: data.email,
-            normalizedEmail,
-            passwordHash
-          })
-          .returningAll()
-          .executeTakeFirstOrThrow()
-
-        const token = tokenUniquey.create()
-        await trx.insertInto('accountValidationTokens').values({ token, userId: user.id }).execute()
-
-        return { user, token }
-      })
-
-      // the account exists now, so a failed email send is non-fatal: log it and tell the user they can request a new link
-      try {
-        await sendValidationEmail(api, config, user, token)
-        await flash.addFlash('success', 'Account created successfully. Please check your email to validate your account.')
-      } catch (error) {
-        utils.logError(logger, error, 'Error sending account validation email')
-        await flash.addFlash(
-          'info',
-          "Account created, but we couldn't send the validation email. You can request a new link from the sign-in page."
-        )
-      }
-      return utils.redirect(c, '/sign-in')
+      await sendValidationEmail(api, config, user, token)
+      await flash.addFlash('success', 'Account created successfully. Please check your email to validate your account.')
     } catch (error) {
-      utils.logError(logger, error, 'Error creating user')
-      return signUpError(c, data, { form: ['An unexpected error occurred. Please try again later.'] }, 500)
+      utils.logError(logger, error, 'Error sending account validation email')
+      await flash.addFlash(
+        'info',
+        "Account created, but we couldn't send the validation email. You can request a new link from the sign-in page."
+      )
     }
+    return utils.redirect(c, '/sign-in')
   })
 
   app.get('/resend-validation', (c) => {
@@ -198,8 +194,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
 
   app.post('/resend-validation', resendLimit, async (c) => {
     const { db, logger, api, config, flash } = c.var
-    const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const form = await utils.formStrings(c)
     const email = form.email
 
     // always respond identically so we never reveal whether an email maps to an account or its status

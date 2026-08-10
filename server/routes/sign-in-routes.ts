@@ -63,8 +63,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
   const acctLimit = m.failureLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'sign-in-acct' })
 
   app.post('/sign-in', signInLimit, async (c) => {
-    const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const form = await utils.formStrings(c)
     const result = utils.validateFormData<SignInData>(form, signInSchema)
 
     if (!result.success) {
@@ -76,65 +75,62 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
 
       const normalizedEmail = normalizeEmail(data.email)
 
-      try {
-        if (await acctLimit.isBlocked(db, normalizedEmail)) {
-          logger.warn('Per-account sign-in failure limit exceeded')
-          c.status(429)
-          return signInError(c, data.email, { form: ['Too many attempts. Please try again later.'] }, form.next)
-        }
-
-        const user = await db.selectFrom('users').where('normalizedEmail', '=', normalizedEmail).selectAll().executeTakeFirst()
-
-        if (!user) {
-          await Bun.password.verify(data.password, DUMMY_HASH, 'bcrypt')
-          await acctLimit.recordFailure(db, normalizedEmail)
-          logger.warn('User not found for sign-in')
-          return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
-        }
-
-        const isPasswordValid = await Bun.password.verify(data.password, user.passwordHash, 'bcrypt')
-
-        if (!isPasswordValid) {
-          await acctLimit.recordFailure(db, normalizedEmail)
-          logger.warn({ userId: user.id }, 'Invalid password for sign-in')
-          return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
-        }
-
-        if (user.status === 'pending') {
-          // correct password — a stuck-mid-validation user retrying is not a credential failure
-          logger.warn({ userId: user.id }, 'Sign-in attempt for pending account')
-          return signInError(
-            c,
-            data.email,
-            { form: ['Please validate your email address before signing in. Need a new link? Use "Resend it" below.'] },
-            form.next
-          )
-        }
-
-        if (user.status !== 'active') {
-          await acctLimit.recordFailure(db, normalizedEmail)
-          logger.warn({ userId: user.id, status: user.status }, 'Sign-in attempt for non-active account')
-          return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
-        }
-
-        await acctLimit.clear(db, normalizedEmail)
-
-        await auth.setUser({
-          uid: user.uid,
-          username: user.username,
-          role: user.role,
-          status: user.status,
-          pwv: m.passwordVersion(user.passwordHash)
-        })
-
-        logger.info({ userId: user.id }, 'User signed in successfully')
-
-        await flash.addFlash('success', 'You have signed in successfully.')
-        return utils.redirect(c, safeNext(form.next) ?? '/')
-      } catch (error) {
-        utils.logError(logger, error, 'Error during sign-in')
-        return signInError(c, data.email, { form: ['An unexpected error occurred. Please try again later.'] }, form.next)
+      // No catch-all: in-form errors are reserved for expected credential/lockout/status outcomes;
+      // unexpected throws go to the errorHandler (OOB flash for HTMX, styled error page for no-JS)
+      if (await acctLimit.isBlocked(db, normalizedEmail)) {
+        logger.warn('Per-account sign-in failure limit exceeded')
+        c.status(429)
+        return signInError(c, data.email, { form: ['Too many attempts. Please try again later.'] }, form.next)
       }
+
+      const user = await db.selectFrom('users').where('normalizedEmail', '=', normalizedEmail).selectAll().executeTakeFirst()
+
+      if (!user) {
+        await Bun.password.verify(data.password, DUMMY_HASH, 'bcrypt')
+        await acctLimit.recordFailure(db, normalizedEmail)
+        logger.warn('User not found for sign-in')
+        return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
+      }
+
+      const isPasswordValid = await Bun.password.verify(data.password, user.passwordHash, 'bcrypt')
+
+      if (!isPasswordValid) {
+        await acctLimit.recordFailure(db, normalizedEmail)
+        logger.warn({ userId: user.id }, 'Invalid password for sign-in')
+        return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
+      }
+
+      if (user.status === 'pending') {
+        // correct password — a stuck-mid-validation user retrying is not a credential failure
+        logger.warn({ userId: user.id }, 'Sign-in attempt for pending account')
+        return signInError(
+          c,
+          data.email,
+          { form: ['Please validate your email address before signing in. Need a new link? Use "Resend it" below.'] },
+          form.next
+        )
+      }
+
+      if (user.status !== 'active') {
+        await acctLimit.recordFailure(db, normalizedEmail)
+        logger.warn({ userId: user.id, status: user.status }, 'Sign-in attempt for non-active account')
+        return signInError(c, data.email, { form: ['Invalid sign in.'] }, form.next)
+      }
+
+      await acctLimit.clear(db, normalizedEmail)
+
+      await auth.setUser({
+        uid: user.uid,
+        username: user.username,
+        role: user.role,
+        status: user.status,
+        pwv: m.passwordVersion(user.passwordHash)
+      })
+
+      logger.info({ userId: user.id }, 'User signed in successfully')
+
+      await flash.addFlash('success', 'You have signed in successfully.')
+      return utils.redirect(c, safeNext(form.next) ?? '/')
     }
   })
 }

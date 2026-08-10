@@ -68,8 +68,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
 
   app.post('/recover-password', recoverLimit, async (c) => {
     const { db, logger, api, config, flash } = c.var
-    const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const form = await utils.formStrings(c)
     const email = form.email
 
     // always respond identically so we never reveal whether an email maps to an account or its status
@@ -192,8 +191,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
   app.post('/recover-password/:token/:uid', resetLimit, async (c) => {
     const { token, uid } = c.req.param()
     const { db, logger, flash } = c.var
-    const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const form = await utils.formStrings(c)
     const result = utils.validateFormData<SetPasswordData>(form, setPasswordSchema)
 
     if (!result.success) {
