@@ -95,6 +95,11 @@ async function processPostForm(
   return { data, uploadedImageUrl: upload.url }
 }
 
+// edit/delete carry the validated origin page in their action query string so error re-renders
+// (fragment and full-page) keep it without a hidden field
+const withReturn = (path: string, returnTo: string | undefined) =>
+  returnTo ? `${path}?return=${encodeURIComponent(returnTo)}` : path
+
 // a post you can view: published, by an active author, and the viewer is the author or in the
 // post's audience (utils.audienceAllows); anything else is a 404
 async function loadVisiblePost(c: Context, viewerUid: string) {
@@ -203,7 +208,8 @@ export default function PostRoutes(app: Hono, logger: Logger) {
 
     logger.info({ uid: user.uid, postUid, status: data.status, audience: data.audience }, 'Post created')
     await flash.addFlash('success', data.status === 'draft' ? 'Draft saved.' : 'Post created.')
-    return utils.redirect(c, `/profile/${user.uid}`)
+    // a published post has a page to land on; a draft does not, so it goes to the profile
+    return utils.redirect(c, data.status === 'draft' ? `/profile/${user.uid}` : `/posts/${postUid}`)
   })
 
   posts.get('/:uid/edit', async (c) => {
@@ -211,10 +217,12 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     const user = await auth.getUser()
     if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const post = await loadOwnPost(c, user.uid)
+    const returnTo = utils.safeReturnPath(c.req.query('return'))
     const target = await db.selectFrom('postTargets').select(['type']).where('postId', '=', post.id).executeTakeFirst()
     return c.render(
       EditPostPage({
         uid: post.uid,
+        returnTo,
         statusOptions: editStatusOptions(post.status),
         content: post.content,
         imageUrl: post.imageUrl ?? undefined,
@@ -237,6 +245,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     const user = await auth.getUser()
     if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const post = await loadOwnPost(c, user.uid)
+    const returnTo = utils.safeReturnPath(c.req.query('return'))
 
     // HTMX failures re-render the form fragment (keeping the Delete Post trigger — the confirm dialog
     // itself is outside the swap); no-JS failures re-render the full page (mirrors GET /posts/:uid/edit)
@@ -245,7 +254,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         c,
         PostForm({
           ...values,
-          action: `/posts/${post.uid}/edit`,
+          action: withReturn(`/posts/${post.uid}/edit`, returnTo),
           submitLabel: 'Save Post',
           statusOptions: editStatusOptions(post.status),
           imageUrl: post.imageUrl ?? undefined,
@@ -255,6 +264,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         }),
         EditPostPage({
           uid: post.uid,
+          returnTo,
           ...values,
           statusOptions: editStatusOptions(post.status),
           imageUrl: post.imageUrl ?? undefined,
@@ -299,7 +309,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
 
     logger.info({ uid: user.uid, postUid: post.uid, status: data.status, audience: data.audience }, 'Post updated')
     await flash.addFlash('success', data.status === 'archived' ? 'Post archived.' : 'Post updated.')
-    return utils.redirect(c, `/profile/${user.uid}`)
+    return utils.redirect(c, returnTo ?? `/profile/${user.uid}`)
   })
 
   posts.post('/:uid/delete', async (c) => {
@@ -307,12 +317,13 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     const user = await auth.getUser()
     if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const post = await loadOwnPost(c, user.uid)
+    const returnTo = utils.safeReturnPath(c.req.query('return'))
 
     await db.updateTable('posts').set({ status: 'deleted', updated: new Date() }).where('id', '=', post.id).execute()
 
     logger.info({ uid: user.uid, postUid: post.uid }, 'Post deleted')
     await flash.addFlash('success', 'Post deleted.')
-    return utils.redirect(c, `/profile/${user.uid}`)
+    return utils.redirect(c, returnTo ?? `/profile/${user.uid}`)
   })
 
   // the full post page; also re-rendered (with commentForm values/errors) when a no-JS comment submit fails
@@ -322,30 +333,23 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     commentForm?: { content?: string; errors?: Record<string, string[]> }
   ) {
     const { db, config } = c.var
-    const [commentRows, countRow] = await Promise.all([
-      db
-        .selectFrom('comments')
-        .innerJoin('users', 'users.uid', 'comments.userUid')
-        .select([
-          'comments.uid as uid',
-          'comments.content as content',
-          'comments.created as created',
-          'users.uid as authorUid',
-          'users.username as authorUsername',
-          'users.info as authorInfo'
-        ])
-        .where('comments.postId', '=', post.id)
-        // id breaks ties so comments created in the same instant keep a stable order
-        .orderBy('comments.created', 'asc')
-        .orderBy('comments.id', 'asc')
-        .limit(COMMENT_LIMIT)
-        .execute(),
-      db
-        .selectFrom('comments')
-        .select((eb) => eb.fn.countAll<number>().as('total'))
-        .where('postId', '=', post.id)
-        .executeTakeFirst()
-    ])
+    const commentRows = await db
+      .selectFrom('comments')
+      .innerJoin('users', 'users.uid', 'comments.userUid')
+      .select([
+        'comments.uid as uid',
+        'comments.content as content',
+        'comments.created as created',
+        'users.uid as authorUid',
+        'users.username as authorUsername',
+        'users.info as authorInfo'
+      ])
+      .where('comments.postId', '=', post.id)
+      // id breaks ties so comments created in the same instant keep a stable order
+      .orderBy('comments.created', 'asc')
+      .orderBy('comments.id', 'asc')
+      .limit(COMMENT_LIMIT)
+      .execute()
 
     const authorInfo = post.authorInfo as UserProfileInfo
     const authorName = authorInfo.fullname ?? post.authorUsername
@@ -376,7 +380,8 @@ export default function PostRoutes(app: Hono, logger: Logger) {
           author: { uid: post.authorUid, name: authorName, imageUrl: utils.displayImageUrl(authorInfo, config.baseImageUrl) }
         },
         comments,
-        commentLimitReached: Number(countRow?.total ?? 0) >= COMMENT_LIMIT,
+        // the row query already stops at the cap, so a full page means the limit is reached
+        commentLimitReached: commentRows.length === COMMENT_LIMIT,
         commentForm
       }),
       {
@@ -429,22 +434,30 @@ export default function PostRoutes(app: Hono, logger: Logger) {
       return rerender(content, { form: ["We couldn't check your text right now. Please try again."] })
     }
 
-    const countRow = await db
-      .selectFrom('comments')
-      .select((eb) => eb.fn.countAll<number>().as('total'))
-      .where('postId', '=', post.id)
-      .executeTakeFirst()
-    if (Number(countRow?.total ?? 0) >= COMMENT_LIMIT) {
+    // count-then-insert inside a transaction that locks the post row, so concurrent submissions
+    // serialize per post and the cap cannot be exceeded by a race
+    const commentUid = uidUniquey.create()
+    const inserted = await db.transaction().execute(async (trx) => {
+      await trx.selectFrom('posts').select('id').where('id', '=', post.id).forUpdate().executeTakeFirst()
+      const countRow = await trx
+        .selectFrom('comments')
+        .select((eb) => eb.fn.countAll<number>().as('total'))
+        .where('postId', '=', post.id)
+        .executeTakeFirst()
+      if (Number(countRow?.total ?? 0) >= COMMENT_LIMIT) return false
+      await trx
+        .insertInto('comments')
+        .values({ uid: commentUid, postId: post.id, userId: user.id, userUid: user.uid, content })
+        .execute()
+      return true
+    })
+    if (!inserted) {
       return rerender(content, { form: ['This post has reached its comment limit.'] })
     }
 
-    await db
-      .insertInto('comments')
-      .values({ uid: uidUniquey.create(), postId: post.id, userId: user.id, userUid: user.uid, content })
-      .execute()
-
     logger.info({ uid: user.uid, postUid: post.uid }, 'Comment added')
     await flash.addFlash('success', 'Comment added.')
-    return utils.redirect(c, `/posts/${post.uid}`)
+    // the fragment lands the full navigation (HX-Redirect included) on the new comment
+    return utils.redirect(c, `/posts/${post.uid}#comment-${commentUid}`)
   })
 }

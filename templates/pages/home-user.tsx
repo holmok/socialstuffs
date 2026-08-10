@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
+import { postPhotoAlt } from '@/utils'
 
 export type FeedPost = {
   uid: string
@@ -54,7 +55,7 @@ const HomeUserPage = ({ posts, page, hasNewer, hasOlder }: HomeUserPageProps) =>
                   aria-label="View photo full size"
                   aria-haspopup="dialog"
                 >
-                  <img class="profile-post-image" src={post.imageUrl} alt="" loading="lazy" />
+                  <img class="profile-post-image" src={post.imageUrl} alt={postPhotoAlt(post.author.name)} loading="lazy" />
                 </a>
               )}
               <p class="profile-post-content">{post.content}</p>

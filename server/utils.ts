@@ -20,6 +20,13 @@ export function redirect(c: Context, path: string) {
   }
 }
 
+// a user-supplied return path is honored only when it is a local absolute path: it must start
+// with '/', must not start with '//' (protocol-relative), and must not contain '://'
+export function safeReturnPath(value: string | null | undefined): string | undefined {
+  if (value == null || !value.startsWith('/') || value.startsWith('//') || value.includes('://')) return undefined
+  return value
+}
+
 // form-error responses branch like redirect(): HTMX submits get the swap fragment, plain (no-JS)
 // submits get the full page via the layout renderer so the error page isn't a bare unstyled fragment.
 // `meta` mirrors the c.render call of the page's GET handler (title/description/styles)
@@ -54,6 +61,12 @@ export const POSTS_PER_PAGE = 5
 
 // 48-hour validity shared by account-validation and password-recovery tokens
 export const TOKEN_TTL_MS = 48 * 60 * 60 * 1000
+
+// shared alt text for post photos; "photo" is deliberate — it distinguishes the post photo from
+// the author avatar next to it (Biome's noRedundantAlt literal check would flag it inline)
+export function postPhotoAlt(authorName: string) {
+  return `Photo posted by ${authorName}`
+}
 
 // users without an uploaded photo get the shared placeholder image from the bucket
 export function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {

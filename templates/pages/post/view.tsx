@@ -1,5 +1,6 @@
 import CommentForm from '@components/post/comment-form'
 import { formatDistanceToNow } from 'date-fns'
+import { postPhotoAlt } from '@/utils'
 
 export type PostViewAuthor = {
   uid: string
@@ -39,6 +40,7 @@ const isEdited = (post: PostView) => post.updated.getTime() > post.created.getTi
 const PostViewPage = ({ post, comments, commentLimitReached, commentForm }: PostViewPageProps) => {
   return (
     <div class="post-page">
+      <h1>Post by {post.author.name}</h1>
       <article class="profile-post feed-post">
         <a
           class="feed-author"
@@ -57,7 +59,7 @@ const PostViewPage = ({ post, comments, commentLimitReached, commentForm }: Post
               aria-label="View photo full size"
               aria-haspopup="dialog"
             >
-              <img class="profile-post-image" src={post.imageUrl} alt="" loading="lazy" />
+              <img class="profile-post-image" src={post.imageUrl} alt={postPhotoAlt(post.author.name)} loading="lazy" />
             </a>
           )}
           <p class="profile-post-content">{post.content}</p>
@@ -82,7 +84,8 @@ const PostViewPage = ({ post, comments, commentLimitReached, commentForm }: Post
         ) : (
           <ol class="comment-list">
             {comments.map((comment) => (
-              <li class="comment" key={comment.uid}>
+              // the item id is the target of the post-comment redirect's #comment-<uid> fragment
+              <li class="comment" id={`comment-${comment.uid}`} key={comment.uid}>
                 <a
                   class="comment-author"
                   href={`/profile/${comment.author.uid}`}
