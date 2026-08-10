@@ -2,6 +2,7 @@ import ProfileActions, { type ProfileActionsProps } from '@components/profile/ac
 import type { PostStatus } from '@data/post-data'
 import type { UserProfileInfo } from '@data/user-data'
 import { formatDistanceToNow } from 'date-fns'
+import { postPhotoAlt } from '@/utils'
 
 export type ProfileFavorite = {
   uid: string
@@ -53,6 +54,10 @@ const ProfileUserPage = ({
 }: ProfileUserPageProps) => {
   const meta = [info.title, info.location].filter(Boolean).join(' · ')
   const memberSince = created?.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  // every post on this page belongs to the profile owner
+  const ownerName = info.fullname || username
+  // Edit links carry the current page so post actions can return here (?p only when off page 1)
+  const returnTo = `/profile/${actions.profileUid}${page > 1 ? `?p=${page}` : ''}`
   return (
     <div className="profile-page">
       <aside className="profile-card profile-side">
@@ -110,7 +115,7 @@ const ProfileUserPage = ({
                     aria-label="View photo full size"
                     aria-haspopup="dialog"
                   >
-                    <img className="profile-post-image" src={post.imageUrl} alt="" loading="lazy" />
+                    <img className="profile-post-image" src={post.imageUrl} alt={postPhotoAlt(ownerName)} loading="lazy" />
                   </a>
                 )}
                 <p className="profile-post-content">{post.content}</p>
@@ -135,7 +140,7 @@ const ProfileUserPage = ({
                     )}
                   </p>
                   {actions.isSelf && (
-                    <a className="profile-post-edit" href={`/posts/${post.uid}/edit`}>
+                    <a className="profile-post-edit" href={`/posts/${post.uid}/edit?return=${encodeURIComponent(returnTo)}`}>
                       Edit
                     </a>
                   )}

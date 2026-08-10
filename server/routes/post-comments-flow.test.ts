@@ -99,13 +99,19 @@ function postComment(postUid: string, content: string, cookie: string) {
 }
 
 function commentsFor(postId: number) {
-  return db.selectFrom('comments').select(['id', 'uid', 'content', 'userUid']).where('postId', '=', postId).execute()
+  return db
+    .selectFrom('comments')
+    .select(['id', 'uid', 'content', 'userUid'])
+    .where('postId', '=', postId)
+    .orderBy('id')
+    .execute()
 }
 
 // seeds rows directly to reach the cap without 29 round trips through the route
 function seedComments(postId: number, user: SeededUser, count: number) {
   const rows = Array.from({ length: count }, (_, index) => ({
-    uid: `test-c${index}-${suffix}`,
+    // postId keeps the uid unique when more than one test seeds toward the cap
+    uid: `test-c${postId}-${index}-${suffix}`,
     postId,
     userId: user.id,
     userUid: user.uid,
@@ -190,14 +196,13 @@ describe('GET /posts/:uid — visibility', () => {
 })
 
 describe('POST /posts/:uid/comments', () => {
-  test('adds comments, redirects back to the post, and renders them oldest first', async () => {
+  test('adds comments, redirects to the new comment anchor, and renders them oldest first', async () => {
     const user = await seedUser('cadd')
     const cookie = await signIn(user)
     const post = await createPost(cookie, user.id)
 
     const first = await postComment(post.uid, `first comment ${suffix}`, cookie)
     expect(first.status).toBe(303)
-    expect(first.headers.get('location')).toBe(`/posts/${post.uid}`)
     const second = await postComment(post.uid, `second comment ${suffix}`, cookie)
     expect(second.status).toBe(303)
 
@@ -205,12 +210,18 @@ describe('POST /posts/:uid/comments', () => {
     expect(rows.length).toBe(2)
     expect(rows.every((row) => row.userUid === user.uid)).toBe(true)
     expect(rows.every((row) => row.uid)).toBe(true)
+    // the redirect lands on the freshly added comment's anchor
+    expect(first.headers.get('location')).toBe(`/posts/${post.uid}#comment-${rows[0].uid}`)
+    expect(second.headers.get('location')).toBe(`/posts/${post.uid}#comment-${rows[1].uid}`)
 
     const body = await (await get(`/posts/${post.uid}`, cookie)).text()
     const firstAt = body.indexOf(`first comment ${suffix}`)
     const secondAt = body.indexOf(`second comment ${suffix}`)
     expect(firstAt).toBeGreaterThan(-1)
     expect(secondAt).toBeGreaterThan(firstAt)
+    // each comment carries the id the anchor points at
+    expect(body).toContain(`id="comment-${rows[0].uid}"`)
+    expect(body).toContain(`id="comment-${rows[1].uid}"`)
     // the commenter is named and linked on each comment
     expect(body).toContain(user.username)
   })
@@ -294,6 +305,23 @@ describe('POST /posts/:uid/comments', () => {
     expect(body).toContain('This post has reached its comment limit.')
     expect(body).not.toContain(`hx-post="/posts/${post.uid}/comments"`)
     expect(body).toContain(`last one ${suffix}`)
+  })
+
+  test('concurrent submissions cannot exceed the cap (the guarded insert serializes per post)', async () => {
+    const user = await seedUser('crace')
+    const cookie = await signIn(user)
+    const post = await createPost(cookie, user.id)
+    await seedComments(post.id, user, 29)
+
+    // both race for the single remaining slot; the post-row lock lets exactly one through
+    const [a, b] = await Promise.all([
+      postComment(post.uid, `race a ${suffix}`, cookie),
+      postComment(post.uid, `race b ${suffix}`, cookie)
+    ])
+    expect([a.status, b.status].sort()).toEqual([200, 303])
+    const rejected = a.status === 200 ? a : b
+    expect(await rejected.text()).toContain('This post has reached its comment limit.')
+    expect((await commentsFor(post.id)).length).toBe(30)
   })
 })
 

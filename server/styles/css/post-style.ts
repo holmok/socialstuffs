@@ -8,6 +8,11 @@ export default {
     maxWidth: '640px',
     margin: '0 auto'
   },
+  // sized like .home-user h1 so the page heading doesn't shout at the global h1 size
+  '.post-page h1': {
+    fontSize: vars.fontSizeMid,
+    marginBottom: vars.spacingMid
+  },
   '.post-comments': {
     marginTop: vars.spacingMain,
     paddingTop: vars.spacingMid,
