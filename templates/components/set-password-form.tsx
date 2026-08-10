@@ -1,6 +1,6 @@
 import TextInput from './text-input'
 
-type SetPasswordFormProps = {
+export type SetPasswordFormProps = {
   token: string
   uid: string
   errors?: Record<string, string[]>

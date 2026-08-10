@@ -1,10 +1,13 @@
-import PostForm, { createStatusOptions } from '@components/post/post-form'
+import PostForm, { createStatusOptions, type PostFormProps } from '@components/post/post-form'
 
-const NewPostPage = () => {
+// form props flow through so no-JS error re-renders of the full page keep the typed values
+type NewPostPageProps = Omit<PostFormProps, 'action' | 'submitLabel' | 'statusOptions'>
+
+const NewPostPage = (form: NewPostPageProps = {}) => {
   return (
     <div>
       <h1>New Post</h1>
-      <PostForm action="/posts/new" submitLabel="Create Post" statusOptions={createStatusOptions} />
+      <PostForm {...form} action="/posts/new" submitLabel="Create Post" statusOptions={createStatusOptions} />
     </div>
   )
 }

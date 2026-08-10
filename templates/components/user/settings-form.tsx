@@ -1,6 +1,6 @@
 import TextInput from '@components/text-input'
 
-type UserSettingsFormProps = {
+export type UserSettingsFormProps = {
   username?: string
   email?: string
   errors?: Record<string, string[]>

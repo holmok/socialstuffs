@@ -42,7 +42,7 @@ async function seedUser(name: string, status: UserStatus): Promise<SeededUser> {
 }
 
 let ipCounter = 0
-function post(path: string, fields: Record<string, string>) {
+function post(path: string, fields: Record<string, string>, headers: Record<string, string> = {}) {
   ipCounter += 1
   return app.request(`http://localhost${path}`, {
     method: 'POST',
@@ -51,7 +51,8 @@ function post(path: string, fields: Record<string, string>) {
       // csrf() requires a same-origin signal; request URL origin is http://localhost
       Origin: 'http://localhost',
       // unique per request so the per-IP rate limiter never trips across tests
-      'X-Forwarded-For': `10.2.0.${ipCounter}`
+      'X-Forwarded-For': `10.2.0.${ipCounter}`,
+      ...headers
     },
     body: new URLSearchParams(fields).toString()
   })
@@ -182,6 +183,41 @@ describe('deep-link next param', () => {
     const html = await (await app.request('http://localhost/sign-in?next=https%3A%2F%2Fevil.example')).text()
     expect(html).not.toContain('name="next"')
     expect(html).not.toContain('evil.example')
+  })
+})
+
+describe('no-JS and HTMX error rendering', () => {
+  test('a validation error on a plain (no-JS) submit renders the full styled page with the typed email kept', async () => {
+    const email = `nojs-${suffix}@example.com`
+    const res = await post('/sign-in', { email, password: '' })
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    // the full page (layout with <title> and inline styles), not a bare form fragment
+    expect(body).toContain('<title>')
+    expect(body).toContain('<style>')
+    expect(body).toContain('Password is required.')
+    expect(body).toContain(`value="${email}"`)
+  })
+
+  test('the same validation error on an HTMX submit returns just the form fragment', async () => {
+    const res = await post('/sign-in', { email: `hx-${suffix}@example.com`, password: '' }, { 'HX-Request': 'true' })
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Password is required.')
+    expect(body).not.toContain('<title>')
+  })
+
+  test('a per-IP 429 keeps the typed email in the re-rendered form', async () => {
+    const email = `iplimit-${suffix}@example.com`
+    // a fixed X-Forwarded-For so this test alone trips the per-IP limiter (max 10 per window)
+    const headers = { 'X-Forwarded-For': '10.2.99.99' }
+    for (let i = 0; i < 10; i++) await post('/sign-in', { email, password: 'Wrong99!x' }, headers)
+
+    const blocked = await post('/sign-in', { email, password: 'Wrong99!x' }, headers)
+    expect(blocked.status).toBe(429)
+    const body = await blocked.text()
+    expect(body).toContain('Too many attempts. Please try again later.')
+    expect(body).toContain(`value="${email}"`)
   })
 })
 

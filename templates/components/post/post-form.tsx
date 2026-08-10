@@ -34,6 +34,8 @@ export type PostFormProps = {
   status?: string
   audience?: string
   errors?: Record<string, string[]>
+  // shown on error re-renders when the failed submit included a photo the browser can't restore
+  imageDroppedNote?: boolean
 }
 
 const audienceOptions: { value: PostTargetType; label: string }[] = [
@@ -133,8 +135,10 @@ const PostForm = (props: PostFormProps) => {
           No file selected
         </span>
         <p className="form-note">
-          {imageUrl ? 'Leave empty to keep the current photo. ' : 'Optional. '}JPEG, PNG, or GIF up to 20MB.
+          {imageUrl ? 'Leave empty to keep the current photo. ' : 'Optional. '}JPEG, PNG, or GIF up to 20MB (animated GIFs become
+          a still image).
         </p>
+        {props.imageDroppedNote && <p className="form-note">Your photo needs to be re-selected.</p>}
         {imageErrors && imageErrors.length > 0 && (
           <ul id="image-errors" className="errors">
             {imageErrors.map((error, index) => (

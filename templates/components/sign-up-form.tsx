@@ -1,6 +1,6 @@
 import TextInput from './text-input'
 
-type SignUpFormProps = {
+export type SignUpFormProps = {
   username?: string
   email?: string
   confirmEmail?: string

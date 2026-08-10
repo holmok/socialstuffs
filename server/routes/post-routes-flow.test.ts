@@ -45,7 +45,12 @@ async function seedUser(name: string): Promise<SeededUser> {
 }
 
 let ipCounter = 0
-function postMultipart(path: string, fields: Record<string, string | File>, cookie?: string) {
+function postMultipart(
+  path: string,
+  fields: Record<string, string | File>,
+  cookie?: string,
+  headers: Record<string, string> = {}
+) {
   ipCounter += 1
   const body = new FormData()
   for (const [key, value] of Object.entries(fields)) body.append(key, value)
@@ -56,7 +61,8 @@ function postMultipart(path: string, fields: Record<string, string | File>, cook
       Origin: 'http://localhost',
       // unique per request so the per-IP rate limiter never trips across tests
       'X-Forwarded-For': `10.5.0.${ipCounter}`,
-      ...(cookie ? { cookie } : {})
+      ...(cookie ? { cookie } : {}),
+      ...headers
     },
     body
   })
@@ -318,6 +324,45 @@ describe('POST /posts/new — validation and moderation', () => {
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Image contains unacceptable content and cannot be uploaded.')
     expect((await postsFor(user.id)).length).toBe(0)
+  })
+
+  test('a non-image failure that included a photo shows the re-select note on the full no-JS page', async () => {
+    const user = await seedUser('nnote')
+    const cookie = await signIn(user)
+    const image = new File([new Uint8Array([1, 2, 3])], 'pic.jpg', { type: 'image/jpeg' })
+
+    const res = await postMultipart('/posts/new', postFields({ content: 'x'.repeat(501), image }), cookie)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    // plain (no-JS) submit: the error re-render is the full styled page, not a bare fragment
+    expect(body).toContain('<title>')
+    expect(body).toContain('Post text must be at most 500 characters long.')
+    // the picked file can't be restored into the re-rendered form, so the user is told
+    expect(body).toContain('Your photo needs to be re-selected.')
+    expect(uploadSpy.mock.calls.length).toBe(0)
+  })
+
+  test('an image-field failure does not show the re-select note', async () => {
+    const user = await seedUser('nnoimg')
+    const cookie = await signIn(user)
+    const image = new File([new Uint8Array([1, 2, 3])], 'pic.txt', { type: 'text/plain' })
+
+    const res = await postMultipart('/posts/new', postFields({ image }), cookie)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Image must be a JPEG, PNG, or GIF.')
+    expect(body).not.toContain('Your photo needs to be re-selected.')
+  })
+
+  test('an HTMX submit still gets just the form fragment on error', async () => {
+    const user = await seedUser('nhx')
+    const cookie = await signIn(user)
+
+    const res = await postMultipart('/posts/new', postFields({ content: '   ' }), cookie, { 'HX-Request': 'true' })
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Post text is required.')
+    expect(body).not.toContain('<title>')
   })
 })
 

@@ -8,14 +8,6 @@ import type { Logger } from 'pino'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
 
-const POSTS_PER_PAGE = 5
-
-// users without an uploaded photo get the shared placeholder image from the bucket (mirrors user-routes)
-function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
-  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
-  return info.profileImageUrl ?? new URL('profile.jpg', base).href
-}
-
 // posts visible on a profile: the owner sees all their non-deleted posts; anyone else sees only
 // published posts whose audience includes them (utils.audienceAllows)
 function profilePostsQuery(c: Context, profileUid: string, viewerUid: string) {
@@ -105,7 +97,7 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
     if (user == null) throw new HTTPException(404, { message: 'User not found' })
 
     const info = { ...(user.info as UserProfileInfo) }
-    info.profileImageUrl = displayImageUrl(info, config.baseImageUrl)
+    info.profileImageUrl = utils.displayImageUrl(info, config.baseImageUrl)
 
     // ?p=<page> drives the posts offset; anything unparseable or below 1 lands on page 1
     const page = Math.max(1, Number.parseInt(c.req.query('p') ?? '', 10) || 1)
@@ -142,18 +134,18 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         .orderBy('posts.created', 'desc')
         .orderBy('posts.id', 'desc')
         // one extra row decides hasOlder — cheaper than re-running the visibility predicate as a COUNT(*)
-        .limit(POSTS_PER_PAGE + 1)
-        .offset((page - 1) * POSTS_PER_PAGE)
+        .limit(utils.POSTS_PER_PAGE + 1)
+        .offset((page - 1) * utils.POSTS_PER_PAGE)
         .execute()
     ])
-    const hasOlder = posts.length > POSTS_PER_PAGE
+    const hasOlder = posts.length > utils.POSTS_PER_PAGE
 
     const favorites: ProfileFavorite[] = favoriteRows.map((row) => {
       const rowInfo = row.info as UserProfileInfo
       return {
         uid: row.uid,
         name: rowInfo.fullname ?? row.username,
-        imageUrl: displayImageUrl(rowInfo, config.baseImageUrl)
+        imageUrl: utils.displayImageUrl(rowInfo, config.baseImageUrl)
       }
     })
 
@@ -164,7 +156,7 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         created: user.created,
         info,
         favorites,
-        posts: posts.slice(0, POSTS_PER_PAGE).map((post) => ({ ...post, commentCount: Number(post.commentCount ?? 0) })),
+        posts: posts.slice(0, utils.POSTS_PER_PAGE).map((post) => ({ ...post, commentCount: Number(post.commentCount ?? 0) })),
         page,
         hasNewer: page > 1,
         hasOlder,

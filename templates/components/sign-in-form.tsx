@@ -1,6 +1,6 @@
 import TextInput from './text-input'
 
-type SignInFormProps = {
+export type SignInFormProps = {
   email?: string
   password?: string
   // deep link to return to after sign-in; already validated as a same-site path by the route

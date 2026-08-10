@@ -1,7 +1,10 @@
 import type data from '@data/index'
 import type { Database } from '@data/index'
+import type { UserProfileInfo } from '@data/user-data'
+import type { style } from '@styles/index'
 import type { Server } from 'bun'
 import type { Context } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { PinoLogger } from 'hono-pino'
 import type { ExpressionBuilder } from 'kysely'
 import type { Logger } from 'pino'
@@ -15,6 +18,47 @@ export function redirect(c: Context, path: string) {
   } else {
     return c.redirect(path, 303)
   }
+}
+
+// form-error responses branch like redirect(): HTMX submits get the swap fragment, plain (no-JS)
+// submits get the full page via the layout renderer so the error page isn't a bare unstyled fragment.
+// `meta` mirrors the c.render call of the page's GET handler (title/description/styles)
+export function formErrorResponse(
+  c: Context,
+  fragment: string | Promise<string>,
+  page: string | Promise<string>,
+  meta: { title: string; description: string; styles?: style[] },
+  status?: ContentfulStatusCode
+) {
+  if (status) c.status(status)
+  if (c.req.header('HX-Request') === 'true') return c.html(fragment)
+  return c.render(page, meta)
+}
+
+// string fields of a form body; tolerates an unparseable/missing body (e.g. a rate-limited bare POST)
+export async function formStrings(c: Context): Promise<Record<string, string>> {
+  try {
+    const formData = await c.req.formData()
+    const values: Record<string, string> = {}
+    for (const [key, value] of formData.entries()) {
+      if (typeof value === 'string') values[key] = value
+    }
+    return values
+  } catch {
+    return {}
+  }
+}
+
+// posts shown per page on the home feed and profile pages
+export const POSTS_PER_PAGE = 5
+
+// 48-hour validity shared by account-validation and password-recovery tokens
+export const TOKEN_TTL_MS = 48 * 60 * 60 * 1000
+
+// users without an uploaded photo get the shared placeholder image from the bucket
+export function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
+  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
+  return info.profileImageUrl ?? new URL('profile.jpg', base).href
 }
 
 export function logError(logger: Logger | PinoLogger, error: unknown, message: string) {

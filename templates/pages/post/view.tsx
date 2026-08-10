@@ -29,12 +29,14 @@ type PostViewPageProps = {
   post: PostView
   comments: PostComment[]
   commentLimitReached: boolean
+  // pre-filled comment values/errors so no-JS error re-renders of the full page keep the typed comment
+  commentForm?: { content?: string; errors?: Record<string, string[]> }
 }
 
 // insert stamps created and updated with the same value in one statement; only an edit moves updated
 const isEdited = (post: PostView) => post.updated.getTime() > post.created.getTime()
 
-const PostViewPage = ({ post, comments, commentLimitReached }: PostViewPageProps) => {
+const PostViewPage = ({ post, comments, commentLimitReached, commentForm }: PostViewPageProps) => {
   return (
     <div class="post-page">
       <article class="profile-post feed-post">
@@ -103,7 +105,7 @@ const PostViewPage = ({ post, comments, commentLimitReached }: PostViewPageProps
         {commentLimitReached ? (
           <p class="comment-limit">This post has reached its comment limit.</p>
         ) : (
-          <CommentForm postUid={post.uid} />
+          <CommentForm postUid={post.uid} {...commentForm} />
         )}
       </section>
     </div>
