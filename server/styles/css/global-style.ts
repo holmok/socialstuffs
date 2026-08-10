@@ -79,8 +79,7 @@ export default {
     borderRadius: vars.borderRadiusMain
   },
   '.flash': {
-    maxWidth: vars.maxWidthMain,
-    margin: '0 auto',
+    width: '100%',
     padding: `${vars.spacingMain} ${vars.spacingMain} 0`,
     display: 'grid',
     gap: vars.spacingSmall
@@ -122,6 +121,41 @@ export default {
   '.flash-close:hover': {
     backgroundColor: 'transparent',
     color: colors.fgMain
+  },
+  // the lightbox dialog is created by lightbox.js and appended to <body>
+  '.lightbox': {
+    backgroundColor: 'transparent',
+    border: 'none',
+    padding: '0',
+    maxWidth: '90vw',
+    maxHeight: '90vh'
+  },
+  '.lightbox::backdrop': {
+    backgroundColor: 'rgba(0, 0, 0, 0.8)'
+  },
+  '.lightbox-image': {
+    display: 'block',
+    maxWidth: '90vw',
+    maxHeight: '85vh',
+    objectFit: 'contain',
+    borderRadius: vars.borderRadiusSmall
+  },
+  // fixed so it pins to the viewport corner regardless of the image size
+  '.lightbox-close': {
+    position: 'fixed',
+    top: vars.spacingMain,
+    right: vars.spacingMain,
+    backgroundColor: 'transparent',
+    color: colors.fgMain,
+    fontSize: vars.fontSizeLarge,
+    lineHeight: '1',
+    padding: vars.spacingVerySmall,
+    border: 'none',
+    cursor: 'pointer'
+  },
+  '.lightbox-close:hover': {
+    backgroundColor: 'transparent',
+    color: colors.fgAccent
   },
   '.card': {
     backgroundColor: colors.bgSurface,

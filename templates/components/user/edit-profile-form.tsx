@@ -90,12 +90,17 @@ const EditProfileForm = (props: EditProfileFormProps) => {
           name="bio"
           rows={6}
           placeholder="Tell people a little about yourself..."
+          data-charcount="bio-char-count"
+          data-charmax="500"
           aria-invalid={bioErrors?.length ? 'true' : undefined}
           aria-describedby={bioErrors?.length ? 'bio-errors' : undefined}
           className={bioErrors?.length ? 'error' : undefined}
         >
           {props.bio}
         </textarea>
+        <p id="bio-char-count" className="char-count">
+          {(props.bio ?? '').length}/500 characters
+        </p>
         {bioErrors && bioErrors.length > 0 && (
           <ul id="bio-errors" className="errors">
             {bioErrors.map((error, index) => (

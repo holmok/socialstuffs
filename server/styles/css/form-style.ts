@@ -66,6 +66,17 @@ export default {
       fontFamily: 'inherit',
       fontSize: 'inherit'
     },
+    select: {
+      display: 'block',
+      width: '100%',
+      backgroundColor: colors.bgSurfaceLight,
+      color: colors.fgMain,
+      border: 'none',
+      borderRadius: vars.borderRadiusSmall,
+      padding: vars.spacingSmall,
+      fontFamily: 'inherit',
+      fontSize: 'inherit'
+    },
     'textarea::placeholder': {
       color: colors.fgMutedMore
     },
@@ -75,6 +86,22 @@ export default {
     },
     'textarea.error::placeholder': {
       color: colors.fgErrorMuted
+    },
+    'textarea.over-limit': {
+      color: colors.fgError
+    },
+    // live counter under limited textareas, driven by char-count.js
+    '.char-count': {
+      fontSize: vars.fontSizeSmall,
+      color: colors.fgMuted,
+      textAlign: 'right',
+      margin: `${vars.spacingVerySmall} 0 0`
+    },
+    '.char-count.warn': {
+      color: colors.fgWarning
+    },
+    '.char-count.over': {
+      color: colors.fgError
     },
     '.image-input': {
       textAlign: 'center'
@@ -87,6 +114,21 @@ export default {
       borderRadius: '50%',
       margin: `0 auto ${vars.spacingSmall}`,
       backgroundColor: colors.bgSurfaceLight
+    },
+    // rectangular preview for post photos; starts hidden until a file is picked.
+    // sized like the profile's post images: full width, tall images crop to their vertical middle
+    '.post-image-preview': {
+      display: 'block',
+      width: '100%',
+      maxHeight: '400px',
+      objectFit: 'cover',
+      borderRadius: vars.borderRadiusSmall,
+      marginBottom: vars.spacingSmall,
+      backgroundColor: colors.bgSurfaceLight
+    },
+    // the reset's `img { display: block }` outranks the UA [hidden] rule, so hide explicitly
+    '.post-image-preview[hidden]': {
+      display: 'none'
     },
     // visually hidden but still focusable, so tabbing to it outlines the styled label
     'input.file-input': {
@@ -167,6 +209,21 @@ export default {
       fontSize: vars.fontSizeSmall,
       color: colors.fgMuted,
       marginTop: vars.spacingSmall
+    },
+    // quiet destructive trigger under the submit button; the real action sits behind a confirm dialog
+    '.post-delete-link': {
+      display: 'block',
+      width: 'auto',
+      margin: `${vars.spacingSmall} auto 0`,
+      padding: vars.spacingVerySmall,
+      backgroundColor: 'transparent',
+      color: colors.fgError,
+      fontSize: vars.fontSizeSmall,
+      fontWeight: '400'
+    },
+    '.post-delete-link:hover': {
+      backgroundColor: 'transparent',
+      textDecoration: 'underline'
     },
     '.form-indicator.htmx-request': {
       display: 'block'

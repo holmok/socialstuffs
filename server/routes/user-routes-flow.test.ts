@@ -186,6 +186,7 @@ describe('GET /user pages', () => {
     expect(body).toContain('Hello there.')
     expect(body).toContain('Member since')
     expect(body).toContain('href="/user/edit-profile"')
+    expect(body).toContain(`href="/profile/${user.uid}"`)
     // no uploaded photo: avatar falls back to the shared placeholder
     expect(body).toContain('profile.jpg')
   })
@@ -462,6 +463,16 @@ describe('POST /user/edit-profile — text fields', () => {
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Full name must be at most 100 characters long.')
     expect(languageSpy.mock.calls.length).toBe(0)
+    expect(await profileInfo(user.id)).toEqual({})
+  })
+
+  test('a bio over 500 characters re-renders with the length error', async () => {
+    const user = await seedUser('epbio')
+    const cookie = await signIn(user)
+
+    const res = await post('/user/edit-profile', { ...PROFILE_FIELDS, bio: 'x'.repeat(501) }, cookie)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Bio must be at most 500 characters long.')
     expect(await profileInfo(user.id)).toEqual({})
   })
 

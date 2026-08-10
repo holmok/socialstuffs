@@ -4,7 +4,8 @@ export type PostStatus = 'draft' | 'published' | 'archived' | 'deleted'
 
 export type PostTable = {
   id: Generated<number>
-  uid: ColumnType<string, never, never>
+  // no database default: the app mints the public uid on insert (same pattern as users.uid)
+  uid: ColumnType<string, string, never>
   userUid: ColumnType<string, string, never>
   userId: ColumnType<number, number, never>
   content: string

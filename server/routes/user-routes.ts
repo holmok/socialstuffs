@@ -36,7 +36,7 @@ const profileSchema = z.object({
   fullname: z.string().trim().max(100, 'Full name must be at most 100 characters long.').optional(),
   title: z.string().trim().max(100, 'Title must be at most 100 characters long.').optional(),
   location: z.string().trim().max(100, 'Location must be at most 100 characters long.').optional(),
-  bio: z.string().trim().max(1000, 'Bio must be at most 1000 characters long.').optional()
+  bio: z.string().trim().max(500, 'Bio must be at most 500 characters long.').optional()
 })
 
 type ProfileData = z.infer<typeof profileSchema>
@@ -66,7 +66,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     if (dbUser == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
     const info = (dbUser.info ?? {}) as UserProfileInfo
     info.profileImageUrl = displayImageUrl(info, c.var.config.baseImageUrl)
-    return c.render(MyProfilePage({ username: dbUser.username, created: dbUser.created, info }), {
+    return c.render(MyProfilePage({ uid: dbUser.uid, username: dbUser.username, created: dbUser.created, info }), {
       title: 'My Profile',
       description: 'This is my profile page.',
       styles: ['user']

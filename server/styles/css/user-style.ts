@@ -74,6 +74,11 @@ export default {
     fontSize: vars.fontSizeSmall,
     margin: 0
   },
+  '.profile-links': {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: vars.spacingSmall
+  },
   '.profile-edit-link': {
     display: 'inline-block',
     marginTop: vars.spacingMid,
