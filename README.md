@@ -24,12 +24,12 @@ Copy the documented example env file and fill in your values (`.env` is gitignor
 cp .example_env .env
 ```
 
-`.example_env` documents every variable: required ones (`DATABASE_URL`, `DATABASE_SCHEMA`, `PORT`, `HOST`, `NODE_ENV`, `LOG_NAME`, `AXIOM_DATASET`/`AXIOM_TOKEN`, `POSTMARK_TOKEN`/`FROM_EMAIL`, `BASE_LINK_URL`, `IMAGE_BUCKET`, `BASE_IMAGE_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `COOKIE_NAME_USER`/`COOKIE_NAME_SESSION`) and the optional ones with defaults (`LOG_LEVEL`, `DATABASE_MIN_CLIENTS`/`DATABASE_MAX_CLIENTS`).
+`.example_env` documents every variable: required ones (`DATABASE_URL`, `DATABASE_SCHEMA`, `PORT`, `HOST`, `NODE_ENV`, `TRUST_PROXY`, `LOG_NAME`, `AXIOM_DATASET`/`AXIOM_TOKEN`, `POSTMARK_TOKEN`/`FROM_EMAIL`, `BASE_LINK_URL`, `IMAGE_BUCKET`, `BASE_IMAGE_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `COOKIE_NAME_USER`/`COOKIE_NAME_SESSION`) and the optional ones with defaults (`LOG_LEVEL`, `DATABASE_MIN_CLIENTS`/`DATABASE_MAX_CLIENTS`).
 
 Create/update the database schema:
 
 ```sh
-bun run migrate    # node-pg-migrate over migrations/ (uses DATABASE_URL)
+bun run migrate up    # node-pg-migrate over migrations/ (uses DATABASE_URL)
 ```
 
 ## Running

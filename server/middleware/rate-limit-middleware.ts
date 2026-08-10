@@ -31,11 +31,15 @@ export function __fillRateLimitKeys(count: number, ttlMs: number) {
 }
 
 function clientIp(c: Context): string {
-  // ngrok appends the observed client IP to X-Forwarded-For, so the LAST entry is the trustworthy one
-  // (earlier entries are attacker-controlled)
-  const parts = c.req.header('x-forwarded-for')?.split(',')
-  const forwarded = parts?.[parts.length - 1]?.trim()
-  if (forwarded) return forwarded
+  // X-Forwarded-For is client-supplied and only meaningful behind a proxy that appends the
+  // observed client IP as the LAST entry (the production ngrok tunnel does; earlier entries are
+  // attacker-controlled). TRUST_PROXY=false ignores it entirely so a directly-exposed server
+  // can't have its per-IP limits rotated away by spoofed headers.
+  if (c.var.config.server.trustProxy) {
+    const parts = c.req.header('x-forwarded-for')?.split(',')
+    const forwarded = parts?.[parts.length - 1]?.trim()
+    if (forwarded) return forwarded
+  }
   try {
     return getConnInfo(c).remote.address ?? 'unknown'
   } catch {

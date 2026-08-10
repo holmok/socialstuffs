@@ -62,7 +62,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         if (!user) {
           await Bun.password.verify(data.password, DUMMY_HASH, 'bcrypt')
           await acctLimit.recordFailure(db, normalizedEmail)
-          logger.warn({ normalizedEmail }, 'User not found for sign-in')
+          logger.warn('User not found for sign-in')
           return c.html(SignInForm({ ...data, errors: { form: ['Invalid sign in.'] } }))
         }
 
@@ -77,7 +77,12 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         if (user.status === 'pending') {
           // correct password — a stuck-mid-validation user retrying is not a credential failure
           logger.warn({ userId: user.id }, 'Sign-in attempt for pending account')
-          return c.html(SignInForm({ ...data, errors: { form: ['Please validate your email address before signing in.'] } }))
+          return c.html(
+            SignInForm({
+              ...data,
+              errors: { form: ['Please validate your email address before signing in. Need a new link? Use "Resend it" below.'] }
+            })
+          )
         }
 
         if (user.status !== 'active') {

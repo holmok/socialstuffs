@@ -53,10 +53,9 @@ The DB re-check that revokes stale sessions runs only inside `authorize()`; the 
 Sign-in doesn't regenerate the session id and sign-out clears only the JWT cookie, leaving the session cookie and kv rows intact. Low impact (the session holds no authorization data), but it's session-fixation-adjacent.
 **Fix:** mint a fresh session id on sign-in; clear session cookie + kv rows on sign-out.
 
-### SEC-8 (Low) — Missing HSTS and Referrer-Policy headers
+### SEC-8 (Low) — ~~Missing HSTS and Referrer-Policy headers~~ *(finding was inaccurate)*
 `server/server.ts:42-54`
-`secureHeaders()` sets CSP and `X-Frame-Options` but no `Strict-Transport-Security` or `Referrer-Policy`.
-**Fix:** add both to the secureHeaders options (`max-age=31536000; includeSubDomains`; `strict-origin-when-cross-origin`).
+**Correction (verified on the wire):** hono's `secureHeaders()` defaults already send `Strict-Transport-Security: max-age=15552000; includeSubDomains` and `Referrer-Policy: no-referrer` even when only CSP/X-Frame-Options are configured — the original finding read the config, not the responses. HSTS is now pinned explicitly at one year in the config; the default `no-referrer` policy is stricter than the suggested `strict-origin-when-cross-origin` and stands.
 
 ### SEC-9 (Low, from patterns pass) — Flagged user content and emails logged verbatim
 `server/api/language-api.ts:31-34`; `server/routes/sign-in-routes.ts:65`, `sign-up-routes.ts:98,207`, `recover-password-routes.ts:102`

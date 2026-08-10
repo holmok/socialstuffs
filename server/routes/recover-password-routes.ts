@@ -99,7 +99,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
           utils.logError(logger, error, 'Error sending password recovery email')
         }
       } else {
-        logger.info({ normalizedEmail }, 'Password recovery requested for unknown or non-active email')
+        logger.info('Password recovery requested for unknown or non-active email')
       }
     } catch (error) {
       utils.logError(logger, error, 'Error processing password recovery request')

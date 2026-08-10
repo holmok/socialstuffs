@@ -56,6 +56,8 @@ const SignInForm = (props: SignInFormProps) => {
         Don't have an account? <a href="/sign-up">Sign up</a> for a FREE account.
         <br />
         Forgot your password? <a href="/recover-password">Recover</a> your password.
+        <br />
+        Didn't get your validation email? <a href="/resend-validation">Resend it</a>.
       </p>
     </form>
   )

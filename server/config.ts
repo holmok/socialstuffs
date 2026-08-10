@@ -5,6 +5,9 @@ import { z } from 'zod'
 export const envSchema = z.object({
   PORT: z.coerce.number().int().positive(),
   HOST: z.string().min(1),
+  // whether the app sits behind a proxy that appends the real client IP to X-Forwarded-For
+  // (the production ngrok tunnel does); when false, forwarded headers are ignored as spoofable
+  TRUST_PROXY: z.enum(['true', 'false']).transform((value) => value === 'true'),
   NODE_ENV: z.enum(['development', 'production', 'test']),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOG_NAME: z.string().min(1),
@@ -139,7 +142,8 @@ export default function LoadConfig() {
     logLevel: env.LOG_LEVEL,
     server: {
       port: env.PORT,
-      host: env.HOST
+      host: env.HOST,
+      trustProxy: env.TRUST_PROXY
     },
     mode: {
       isDev: env.NODE_ENV === 'development',

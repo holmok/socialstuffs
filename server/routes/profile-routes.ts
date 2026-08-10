@@ -110,7 +110,7 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
     // ?p=<page> drives the posts offset; anything unparseable or below 1 lands on page 1
     const page = Math.max(1, Number.parseInt(c.req.query('p') ?? '', 10) || 1)
 
-    const [state, favoriteRows, posts, postCount] = await Promise.all([
+    const [state, favoriteRows, posts] = await Promise.all([
       actionState(c, viewerUid, uid),
       db
         .selectFrom('favorites')
@@ -141,14 +141,12 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         // id breaks ties so posts created in the same instant keep a stable order across pages
         .orderBy('posts.created', 'desc')
         .orderBy('posts.id', 'desc')
-        .limit(POSTS_PER_PAGE)
+        // one extra row decides hasOlder — cheaper than re-running the visibility predicate as a COUNT(*)
+        .limit(POSTS_PER_PAGE + 1)
         .offset((page - 1) * POSTS_PER_PAGE)
-        .execute(),
-      profilePostsQuery(c, uid, viewerUid)
-        .select((eb) => eb.fn.countAll<number>().as('total'))
-        .executeTakeFirst()
+        .execute()
     ])
-    const totalPosts = Number(postCount?.total ?? 0)
+    const hasOlder = posts.length > POSTS_PER_PAGE
 
     const favorites: ProfileFavorite[] = favoriteRows.map((row) => {
       const rowInfo = row.info as UserProfileInfo
@@ -166,10 +164,10 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         created: user.created,
         info,
         favorites,
-        posts: posts.map((post) => ({ ...post, commentCount: Number(post.commentCount ?? 0) })),
+        posts: posts.slice(0, POSTS_PER_PAGE).map((post) => ({ ...post, commentCount: Number(post.commentCount ?? 0) })),
         page,
         hasNewer: page > 1,
-        hasOlder: page * POSTS_PER_PAGE < totalPosts,
+        hasOlder,
         actions: { profileUid: uid, isSelf: viewerUid === uid, ...state }
       }),
       {

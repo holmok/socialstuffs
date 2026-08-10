@@ -28,8 +28,9 @@ export default class LanguageAPI {
         if (category.confidence != null) {
           const threshold = this.threshold[category.name as string]
           if (threshold != null && category.confidence >= threshold) {
+            // log shape only, never the text itself — flagged user content must not land in logs
             this.logger.warn(
-              { content, category: category.name, confidence: category.confidence },
+              { length: content.length, category: category.name, confidence: category.confidence },
               'Content flagged as inappropriate'
             )
             flaggedCategories.push(category.name as string)

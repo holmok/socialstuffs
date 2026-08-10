@@ -14,12 +14,14 @@ document.addEventListener('click', (event) => {
   removeFlashItem(item)
 })
 
-// flash notices dismiss themselves after 10 seconds; the close button still clears them sooner
+// success/info notices dismiss themselves after 10 seconds; errors stay until closed so a
+// glance away can't hide a failure — the close button clears any of them
 const FLASH_DISMISS_MS = 10000
 
 function scheduleFlashDismissals() {
   for (const item of document.querySelectorAll('.flash-item:not([data-dismiss-scheduled])')) {
     item.dataset.dismissScheduled = 'true'
+    if (item.classList.contains('flash-error')) continue
     setTimeout(() => {
       if (item.isConnected) removeFlashItem(item)
     }, FLASH_DISMISS_MS)

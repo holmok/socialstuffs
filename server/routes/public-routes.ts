@@ -72,40 +72,36 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
     // ?p=<page> drives the posts offset; anything unparseable or below 1 lands on page 1
     const page = Math.max(1, Number.parseInt(c.req.query('p') ?? '', 10) || 1)
 
-    const [rows, countRow] = await Promise.all([
-      feedQuery(c, viewerUid)
-        .select([
-          'posts.uid as uid',
-          'posts.content as content',
-          'posts.imageUrl as imageUrl',
-          'posts.linkUrl as linkUrl',
-          'posts.linkText as linkText',
-          'posts.created as created',
-          'posts.updated as updated',
-          'users.uid as authorUid',
-          'users.username as authorUsername',
-          'users.info as authorInfo'
-        ])
-        .select((eb) =>
-          eb
-            .selectFrom('comments')
-            .select((cb) => cb.fn.countAll<number>().as('total'))
-            .whereRef('comments.postId', '=', 'posts.id')
-            .as('commentCount')
-        )
-        // id breaks ties so posts created in the same instant keep a stable order across pages
-        .orderBy('posts.created', 'desc')
-        .orderBy('posts.id', 'desc')
-        .limit(POSTS_PER_PAGE)
-        .offset((page - 1) * POSTS_PER_PAGE)
-        .execute(),
-      feedQuery(c, viewerUid)
-        .select((eb) => eb.fn.countAll<number>().as('total'))
-        .executeTakeFirst()
-    ])
-    const totalPosts = Number(countRow?.total ?? 0)
+    // one extra row decides hasOlder — far cheaper than re-running the visibility predicate as a COUNT(*)
+    const rows = await feedQuery(c, viewerUid)
+      .select([
+        'posts.uid as uid',
+        'posts.content as content',
+        'posts.imageUrl as imageUrl',
+        'posts.linkUrl as linkUrl',
+        'posts.linkText as linkText',
+        'posts.created as created',
+        'posts.updated as updated',
+        'users.uid as authorUid',
+        'users.username as authorUsername',
+        'users.info as authorInfo'
+      ])
+      .select((eb) =>
+        eb
+          .selectFrom('comments')
+          .select((cb) => cb.fn.countAll<number>().as('total'))
+          .whereRef('comments.postId', '=', 'posts.id')
+          .as('commentCount')
+      )
+      // id breaks ties so posts created in the same instant keep a stable order across pages
+      .orderBy('posts.created', 'desc')
+      .orderBy('posts.id', 'desc')
+      .limit(POSTS_PER_PAGE + 1)
+      .offset((page - 1) * POSTS_PER_PAGE)
+      .execute()
+    const hasOlder = rows.length > POSTS_PER_PAGE
 
-    const posts: FeedPost[] = rows.map((row) => {
+    const posts: FeedPost[] = rows.slice(0, POSTS_PER_PAGE).map((row) => {
       const info = row.authorInfo as UserProfileInfo
       return {
         uid: row.uid,
@@ -129,7 +125,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
         posts,
         page,
         hasNewer: page > 1,
-        hasOlder: page * POSTS_PER_PAGE < totalPosts
+        hasOlder
       }),
       {
         title: 'Home',

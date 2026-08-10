@@ -8,8 +8,8 @@ const EditPostPage = ({ uid, ...form }: EditPostPageProps) => {
       <h1>Edit Post</h1>
       <PostForm {...form} action={`/posts/${uid}/edit`} submitLabel="Save Post" showDelete />
       {/* outside the form so HTMX error re-renders (which swap the form) never duplicate it */}
-      <dialog id="post-delete-modal" className="delete-modal">
-        <h3>Delete this post?</h3>
+      <dialog id="post-delete-modal" className="delete-modal" aria-labelledby="post-delete-title">
+        <h3 id="post-delete-title">Delete this post?</h3>
         <p>This will remove the post from your profile. It cannot be undone.</p>
         <div className="modal-actions">
           <button type="button" data-modal-close="">

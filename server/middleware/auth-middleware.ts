@@ -16,6 +16,10 @@ type User = Omit<UserData, 'passwordHash' | 'normalizedUsername' | 'normalizedEm
 export type AuthContext = {
   user: UserContext | undefined
   getUser: () => Promise<User | undefined>
+  // internal: the memoized full row (incl. passwordHash) shared by authorize() and getUser(),
+  // so a gated request pays one users SELECT. Route handlers should use getUser(), which
+  // omits credential fields
+  getUserRow: () => Promise<UserData | undefined>
   setUser: (userContext: UserContext) => Promise<void>
   signOut: () => Promise<void>
 }
@@ -61,6 +65,8 @@ export function authenticate(): MiddlewareHandler {
         })
       }
     }
+    // per-request memo: undefined = not fetched yet, null = fetched and missing
+    let userRow: UserData | null | undefined
     const auth: AuthContext = {
       user: userContext,
       async setUser(userContext: UserContext) {
@@ -74,9 +80,16 @@ export function authenticate(): MiddlewareHandler {
           maxAge: 60 * 60 * 24 * 7
         })
       },
-      async getUser() {
+      async getUserRow() {
         if (!userContext) return undefined
-        const user = await db.selectFrom('users').where('uid', '=', userContext.uid).selectAll().executeTakeFirst()
+        if (userRow === undefined) {
+          const row = await db.selectFrom('users').where('uid', '=', userContext.uid).selectAll().executeTakeFirst()
+          userRow = row ?? null
+        }
+        return userRow ?? undefined
+      },
+      async getUser() {
+        const user = await auth.getUserRow()
         return user ? mapUserToUser(user) : undefined
       },
       async signOut() {
@@ -100,7 +113,7 @@ type AuthorizeOptions = {
 
 export function authorize(opts: AuthorizeOptions): MiddlewareHandler {
   return async (c, next) => {
-    const { auth, db, logger } = c.var
+    const { auth, logger } = c.var
     const { user } = auth
     if ((opts.requireAuth || opts.roles) && !user) {
       logger.warn('Unauthorized access attempt to a protected route')
@@ -112,12 +125,9 @@ export function authorize(opts: AuthorizeOptions): MiddlewareHandler {
     }
     if (user && (opts.requireAuth || opts.roles)) {
       // re-check the DB so bans/demotions and password resets take effect immediately
-      // instead of after the JWT's 7-day exp; claims alone are a sign-in-time snapshot
-      const dbUser = await db
-        .selectFrom('users')
-        .where('uid', '=', user.uid)
-        .select(['status', 'role', 'passwordHash'])
-        .executeTakeFirst()
+      // instead of after the JWT's 7-day exp; claims alone are a sign-in-time snapshot.
+      // getUserRow() memoizes the row, so a handler's later getUser() costs no second query
+      const dbUser = await auth.getUserRow()
       if (dbUser?.status !== 'active' || passwordVersion(dbUser.passwordHash) !== user.pwv) {
         logger.warn({ user: user.username }, 'Stale or revoked credentials, clearing auth cookie')
         await auth.signOut()

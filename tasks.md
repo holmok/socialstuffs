@@ -12,19 +12,19 @@ Prioritized, reasonably small chunks. IDs reference [audit.md](audit.md). Effort
 - [x] **6. Cap decoded image dimensions** (PERF-1, S) — 8000px/side, enforced by a header-only probe (PNG/GIF/JPEG) *before* decode so a decompression bomb never allocates, with a post-decode backstop. `server/api/image-api.ts`
 - [x] **7. Fix `throw new Response` → `HTTPException`** (PP-2, S) — five sites in `server/routes/user-routes.ts`
 
-## P1 — High-impact quick wins
+## P1 — High-impact quick wins (all done 2026-08-09)
 
-- [ ] **8. Add resend-validation escape hatch** (UX-1, S) — link on the sign-in form footer + pending-status error. `templates/components/sign-in-form.tsx`, `server/routes/sign-in-routes.ts`
-- [ ] **9. Stop auto-dismissing error flashes** (UX-7, S) — skip the 10s timer for `.flash-error`. `static/js/flash.js`
-- [ ] **10. Drop the feed/profile count query** (PERF-2, S) — fetch `POSTS_PER_PAGE + 1` rows, derive `hasOlder`. `server/routes/public-routes.ts`, `server/routes/profile-routes.ts`
-- [ ] **11. Index migration for feed/profile sorts** (PERF-3, S) — `(status, created DESC, id DESC)` + `(userUid, created DESC)` on posts; drop the standalone status index. New file in `migrations/`
-- [ ] **12. kvStorage + nullability migration** (PERF-7, PP-7, S) — drop duplicate `idx_kvStorage_key`, add expires index; `SET NOT NULL` on `comments.post_id`, `kv_storage.value`, `posts.updated`. New file in `migrations/`
-- [ ] **13. A11y naming pass** (UI-1, UI-2, UI-8, S) — aria-labels on lightbox links + lightbox dialog, `aria-labelledby` on confirm dialogs, real label on the delete-confirm input. `templates/pages/*`, `static/js/lightbox.js`
-- [ ] **14. Single user lookup per request** (PERF-4, S) — `authorize()` caches the full row; `getUser()` returns it. `server/middleware/auth-middleware.ts`
-- [ ] **15. Add HSTS + Referrer-Policy** (SEC-8, S) — `server/server.ts` secureHeaders options
-- [ ] **16. Trusted-proxy IP resolution for the rate limiter** (SEC-4, M) — honor XFF only behind a configured trusted proxy; document the deployment invariant. `server/middleware/rate-limit-middleware.ts`
-- [ ] **17. Stop logging user content and emails** (SEC-9, S) — log length/category in language-api; drop or redact emails on auth paths. `server/api/language-api.ts`, auth routes
-- [ ] **18. Hoist Vision client + parallelize the upload path** (PERF-5, S) — client to constructor; `Promise.all` moderation/image work and the GCS delete loop. `server/api/image-api.ts`, `server/routes/post-routes.ts`
+- [x] **8. Add resend-validation escape hatch** (UX-1, S) — "Resend it" link in the sign-in footer; pending-status error points at it. `templates/components/sign-in-form.tsx`, `server/routes/sign-in-routes.ts`
+- [x] **9. Stop auto-dismissing error flashes** (UX-7, S) — `.flash-error` items keep their close button but no timer. `static/js/flash.js`
+- [x] **10. Drop the feed/profile count query** (PERF-2, S) — both routes fetch `POSTS_PER_PAGE + 1` rows and derive `hasOlder` from the extra row.
+- [x] **11. Index migration for feed/profile sorts** (PERF-3, S) — `migrations/1786330471000_posts-feed-indexes.ts`, applied.
+- [x] **12. kvStorage + nullability migration** (PERF-7, PP-7, S) — `migrations/1786330472000_kv-index-and-not-nulls.ts`, applied (with stray-NULL cleanup before each `SET NOT NULL`).
+- [x] **13. A11y naming pass** (UI-1, UI-2, S) — lightbox links labeled + `aria-haspopup`, lightbox dialog named, confirm dialogs `aria-labelledby`, delete-confirm input labeled.
+- [x] **14. Single user lookup per request** (PERF-4, S) — `auth.getUserRow()` memoizes the full row; `authorize()` and `getUser()` share it.
+- [x] **15. ~~Add HSTS + Referrer-Policy~~** (SEC-8, S) — finding was inaccurate: hono's defaults already send both (verified on the wire); HSTS now pinned explicitly at one year. See the correction in audit.md.
+- [x] **16. Trusted-proxy IP resolution** (SEC-4, M) — new required `TRUST_PROXY` env var; XFF honored only when true, socket peer otherwise. `server/middleware/rate-limit-middleware.ts`, `server/config.ts`
+- [x] **17. Stop logging user content and emails** (SEC-9, S) — language-api logs length/category only; email fields dropped from auth-path logs.
+- [x] **18. Hoist Vision client + parallelize deletes** (PERF-5, S) — client lives on the API instance; GCS delete loop is `Promise.all`. Deliberately kept text moderation *before* image upload (overlapping them would orphan uploaded files when text is flagged) — revisit with the P2 pipeline refactor (task 27).
 
 ## P2 — Flow & consistency improvements
 

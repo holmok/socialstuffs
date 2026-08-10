@@ -63,8 +63,7 @@ function headerDimensions(buffer: Buffer): { width: number; height: number } | n
   return null
 }
 
-async function isUnacceptable(buffer: Buffer, logger: Logger) {
-  const visionClient = new Vision.ImageAnnotatorClient()
+async function isUnacceptable(visionClient: InstanceType<typeof Vision.ImageAnnotatorClient>, buffer: Buffer, logger: Logger) {
   const [results] = await visionClient.safeSearchDetection(buffer)
   const detections = results.safeSearchAnnotation
   if (detections == null) return false // If we can't get a result, we should probably allow the image rather than block it
@@ -80,11 +79,14 @@ async function isUnacceptable(buffer: Buffer, logger: Logger) {
 export default class ImagesAPI {
   private readonly logger: Logger
   private readonly storage: Storage
+  // one client for the API's lifetime — constructing per upload paid a fresh gRPC channel + auth handshake every call
+  private readonly vision: InstanceType<typeof Vision.ImageAnnotatorClient>
   private readonly imageBucket: string
   private readonly baseImageUrl: string
   constructor(_logger: Logger, config: Config) {
     this.logger = _logger.child({ module: 'ImagesAPI' })
     this.storage = new Storage()
+    this.vision = new Vision.ImageAnnotatorClient()
     this.imageBucket = config.imageBucket
     // new URL(path, base) replaces the last segment of a base without a trailing slash,
     // which would silently drop the bucket path from returned URLs
@@ -111,7 +113,7 @@ export default class ImagesAPI {
       image.scaleToFit({ w: maxDimension, h: maxDimension })
       const output = await image.getBuffer(mimetype, { quality: 50 })
 
-      const unacceptable = await isUnacceptable(output, this.logger)
+      const unacceptable = await isUnacceptable(this.vision, output, this.logger)
       if (unacceptable) {
         this.logger.warn('Image rejected due to unacceptable content')
         throw new ImageUploadError('Image contains unacceptable content and cannot be uploaded.', {
@@ -122,9 +124,7 @@ export default class ImagesAPI {
       const bucket = this.storage.bucket(this.imageBucket)
       if (removePrefix != null) {
         const [files] = await bucket.getFiles({ prefix: `${userUid}/${removePrefix}` })
-        for (const file of files) {
-          await file.delete()
-        }
+        await Promise.all(files.map((file) => file.delete()))
       }
 
       const file = bucket.file(`${userUid}/${filename}.jpg`)

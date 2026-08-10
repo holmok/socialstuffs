@@ -55,6 +55,30 @@ describe('rateLimit', () => {
   })
 })
 
+describe('rateLimit with TRUST_PROXY=false', () => {
+  beforeEach(() => {
+    __resetRateLimits()
+  })
+
+  test('spoofed X-Forwarded-For headers are ignored and share one bucket', async () => {
+    const untrusting = createApp({ ...config, server: { ...config.server, trustProxy: false } }, logger)
+    const request = (ip: string) =>
+      untrusting.app.request('http://localhost/sign-in', {
+        method: 'POST',
+        headers: { 'X-Forwarded-For': ip, 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'http://localhost' },
+        body: 'email=&password='
+      })
+
+    // every request claims a different forwarded IP, but without a trusted proxy they all
+    // resolve to the same socket identity, so rotating the header can't reset the window
+    for (let i = 0; i < 10; i++) {
+      expect((await request(`203.0.113.${i}`)).status).toBe(200)
+    }
+    expect((await request('203.0.113.200')).status).toBe(429)
+    await untrusting.db.destroy()
+  })
+})
+
 describe('rateLimit overflow (MAX_TRACKED_KEYS)', () => {
   beforeEach(() => {
     __resetRateLimits()

@@ -48,7 +48,13 @@ const PostViewPage = ({ post, comments, commentLimitReached }: PostViewPageProps
         </a>
         <div class="feed-post-body">
           {post.imageUrl && (
-            <a class="profile-post-image-link" href={post.imageUrl} data-lightbox="">
+            <a
+              class="profile-post-image-link"
+              href={post.imageUrl}
+              data-lightbox=""
+              aria-label="View photo full size"
+              aria-haspopup="dialog"
+            >
               <img class="profile-post-image" src={post.imageUrl} alt="" loading="lazy" />
             </a>
           )}

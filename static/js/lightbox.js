@@ -8,6 +8,7 @@ function ensureDialog() {
   if (dialog) return
   dialog = document.createElement('dialog')
   dialog.className = 'lightbox'
+  dialog.setAttribute('aria-label', 'Image viewer')
   const close = document.createElement('button')
   close.type = 'button'
   close.className = 'lightbox-close'

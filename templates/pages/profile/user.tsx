@@ -94,7 +94,13 @@ const ProfileUserPage = ({
             posts.map((post) => (
               <article className="profile-post" key={post.uid}>
                 {post.imageUrl && (
-                  <a className="profile-post-image-link" href={post.imageUrl} data-lightbox="">
+                  <a
+                    className="profile-post-image-link"
+                    href={post.imageUrl}
+                    data-lightbox=""
+                    aria-label="View photo full size"
+                    aria-haspopup="dialog"
+                  >
                     <img className="profile-post-image" src={post.imageUrl} alt="" loading="lazy" />
                   </a>
                 )}

@@ -49,7 +49,9 @@ export function createApp(config: Config, logger: Logger) {
         imgSrc: ["'self'", 'data:', 'blob:', new URL(config.baseImageUrl).origin],
         frameAncestors: ["'none'"]
       },
-      xFrameOptions: 'DENY'
+      xFrameOptions: 'DENY',
+      // hono's default already sends HSTS (180 days); pin it explicitly at a year
+      strictTransportSecurity: 'max-age=31536000; includeSubDomains'
     })
   )
   app.use('/js/*', m.staticCache(config), etag(), serveStatic({ root: './static' }))

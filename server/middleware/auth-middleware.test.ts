@@ -20,6 +20,7 @@ function appWithUser(user: UserContext | undefined) {
     const auth: AuthContext = {
       user,
       getUser: async () => undefined,
+      getUserRow: async () => undefined,
       setUser: async () => {},
       signOut: async () => {}
     }

@@ -95,7 +95,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
       .select(['normalizedEmail', 'normalizedUsername'])
       .execute()
 
-    logger.debug({ normalizedEmail, normalizedUsername, existingUsers }, 'Checking for existing user')
+    logger.debug({ existing: existingUsers.length }, 'Checking for existing user')
 
     const errors: Partial<Record<keyof SignUpData, string[]>> = {}
     if (existingUsers.length > 0) {
@@ -204,7 +204,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
         await sendValidationEmail(api, config, user, token)
         logger.info({ userId: user.id }, 'Resent account validation email')
       } else {
-        logger.info({ normalizedEmail }, 'Resend validation requested for unknown or non-pending email')
+        logger.info('Resend validation requested for unknown or non-pending email')
       }
     } catch (error) {
       utils.logError(logger, error, 'Error resending account validation email')

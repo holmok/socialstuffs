@@ -50,13 +50,14 @@ const UserDataPage = ({ lastExportUrl }: UserDataPageProps) => {
         <button type="button" id="delete-account-open" className="danger-button">
           Delete My Account…
         </button>
-        <dialog id="delete-account-modal" className="delete-modal">
+        <dialog id="delete-account-modal" className="delete-modal" aria-labelledby="delete-account-title">
           <form action="/user/data/delete" method="post">
-            <h3>Are you sure?</h3>
+            <h3 id="delete-account-title">Are you sure?</h3>
             <p className="form-note">
               This permanently deletes your account and all of your content. Type <strong>delete</strong> and enter your password
               to confirm.
             </p>
+            <label htmlFor="delete-confirm-input">Type "delete" to confirm</label>
             <input id="delete-confirm-input" name="confirm" type="text" placeholder='Type "delete"...' autocomplete="off" />
             <label htmlFor="delete-password-input">Your password</label>
             <input
