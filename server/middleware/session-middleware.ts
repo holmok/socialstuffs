@@ -80,9 +80,12 @@ export function session(): MiddlewareHandler {
         // regenerate the session across an auth boundary (sign-in/sign-out) so a pre-auth session id
         // never carries over (session fixation). Drops the old session's kv rows, mints a fresh id,
         // and re-points the cookie — later get/set/pop calls use the new id, so write flashes AFTER
-        // rotating or they die with the old session. (Session ids are alphanumeric, so the LIKE
-        // pattern has no metacharacters.)
-        await db.deleteFrom('kvStorage').where('key', 'like', `${sessionId}:%`).execute()
+        // rotating or they die with the old session. Minted ids are alphanumeric, but the signed-cookie
+        // HMAC covers only the value — a client can replay another cookie signed with the same secret
+        // (e.g. the auth JWT, whose base64url alphabet includes `_`) as the session cookie, so escape
+        // LIKE metacharacters rather than trusting the id's shape.
+        const escaped = session.sessionId.replace(/[\\%_]/g, (ch: string) => `\\${ch}`)
+        await db.deleteFrom('kvStorage').where('key', 'like', `${escaped}:%`).execute()
         sessionId = uniquey.create()
         session.sessionId = sessionId
         await setSessionCookie(sessionId)
