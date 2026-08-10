@@ -50,7 +50,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   logger.info('Registering public routes')
 
   app.get('/', async (c) => {
-    const { auth, config } = c.var
+    const { auth, config, db } = c.var
 
     // re-check the DB like authorize() does: JWT claims are a sign-in-time snapshot, and a banned/
     // deleted user (or one whose password changed) must lose the feed now, not at the 7-day exp
@@ -73,34 +73,47 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
     // ?p=<page> drives the posts offset; anything unparseable or below 1 lands on page 1
     const page = Math.max(1, Number.parseInt(c.req.query('p') ?? '', 10) || 1)
 
-    // one extra row decides hasOlder — far cheaper than re-running the visibility predicate as a COUNT(*)
-    const rows = await feedQuery(c, viewerUid)
-      .select([
-        'posts.uid as uid',
-        'posts.content as content',
-        'posts.imageUrl as imageUrl',
-        'posts.linkUrl as linkUrl',
-        'posts.linkText as linkText',
-        'posts.created as created',
-        'posts.updated as updated',
-        'users.uid as authorUid',
-        'users.username as authorUsername',
-        'users.info as authorInfo'
-      ])
-      .select((eb) =>
-        eb
-          .selectFrom('comments')
-          .select((cb) => cb.fn.countAll<number>().as('total'))
-          .whereRef('comments.postId', '=', 'posts.id')
-          .as('commentCount')
-      )
-      // id breaks ties so posts created in the same instant keep a stable order across pages
-      .orderBy('posts.created', 'desc')
-      .orderBy('posts.id', 'desc')
-      .limit(utils.POSTS_PER_PAGE + 1)
-      .offset((page - 1) * utils.POSTS_PER_PAGE)
-      .execute()
+    // one extra row decides hasOlder — far cheaper than re-running the visibility predicate as a COUNT(*).
+    // The two existence probes drive the discover CTA for users who haven't built a circle yet.
+    const [rows, firstFavorite, firstApproval] = await Promise.all([
+      feedQuery(c, viewerUid)
+        .select([
+          'posts.uid as uid',
+          'posts.content as content',
+          'posts.imageUrl as imageUrl',
+          'posts.linkUrl as linkUrl',
+          'posts.linkText as linkText',
+          'posts.created as created',
+          'posts.updated as updated',
+          'users.uid as authorUid',
+          'users.username as authorUsername',
+          'users.info as authorInfo'
+        ])
+        .select((eb) =>
+          eb
+            .selectFrom('comments')
+            .select((cb) => cb.fn.countAll<number>().as('total'))
+            .whereRef('comments.postId', '=', 'posts.id')
+            .as('commentCount')
+        )
+        // id breaks ties so posts created in the same instant keep a stable order across pages
+        .orderBy('posts.created', 'desc')
+        .orderBy('posts.id', 'desc')
+        .limit(utils.POSTS_PER_PAGE + 1)
+        .offset((page - 1) * utils.POSTS_PER_PAGE)
+        .execute(),
+      db.selectFrom('favorites').select('id').where('userUid', '=', viewerUid).limit(1).executeTakeFirst(),
+      db
+        .selectFrom('relations')
+        .select('id')
+        .where('userUid', '=', viewerUid)
+        .where('type', '=', 'approve')
+        .limit(1)
+        .executeTakeFirst()
+    ])
     const hasOlder = rows.length > utils.POSTS_PER_PAGE
+    // no favorites and no approvals means the feed can only ever show their own posts
+    const showDiscoverCta = firstFavorite == null && firstApproval == null
 
     const posts: FeedPost[] = rows.slice(0, utils.POSTS_PER_PAGE).map((row) => {
       const info = row.authorInfo
@@ -126,7 +139,8 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
         posts,
         page,
         hasNewer: page > 1,
-        hasOlder
+        hasOlder,
+        showDiscoverCta
       }),
       {
         title: 'Home',

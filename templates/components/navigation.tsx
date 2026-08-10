@@ -25,6 +25,9 @@ const Navigation = (props: NavigationProps) => {
         {isAuthenticated && (
           <>
             <li>
+              <a href="/discover">Discover</a>
+            </li>
+            <li>
               <a href="/posts/new">New Post</a>
             </li>
             <li>
