@@ -26,26 +26,28 @@ Prioritized, reasonably small chunks. IDs reference [audit.md](audit.md). Effort
 - [x] **17. Stop logging user content and emails** (SEC-9, S) — language-api logs length/category only; email fields dropped from auth-path logs.
 - [x] **18. Hoist Vision client + parallelize deletes** (PERF-5, S) — client lives on the API instance; GCS delete loop is `Promise.all`. Deliberately kept text moderation *before* image upload (overlapping them would orphan uploaded files when text is flagged) — revisit with the P2 pipeline refactor (task 27).
 
-## P2 — Flow & consistency improvements
+## P2 — Flow & consistency improvements (all done 2026-08-09 via PRs #40–#44)
 
-- [ ] **19. Full-page renders for no-JS form errors** (UX-2, M) — shared helper that branches on `HX-Request`: fragment vs. full page. All form routes
-- [ ] **20. Return-to destination through sign-in** (UX-3, M) — stash the 401'd path; honor on sign-in success. `server/middleware/error-middleware.ts`, `server/routes/sign-in-routes.ts`
-- [ ] **21. New Post in nav + empty-feed CTA** (UX-4, S) — `templates/components/navigation.tsx`, `templates/pages/home-user.tsx`
-- [ ] **22. Post actions return you to where you were** (UX-5, S/M) — validated return param through edit links; land on the post page after create. `server/routes/post-routes.ts`, `templates/pages/profile/user.tsx`
-- [ ] **23. Warn when a picked file is dropped on error re-render** (UX-6, S) — "your photo needs to be re-selected" note. `server/routes/post-routes.ts`, `server/routes/user-routes.ts`, form components
-- [ ] **24. Preserve typed input on 429s** (UX-8, M) — read the body in `onLimit`, re-render with values. Auth routes
-- [ ] **25. Sort out GIF handling** (UX-9, S) — stop advertising GIF or state the still-image conversion in the hint. `templates/components/post/post-form.tsx`, accept lists
-- [ ] **26. Consolidate duplicated route helpers** (PP-3, S) — `displayImageUrl`, image constants, `POSTS_PER_PAGE`, token TTL → shared module; reuse `utils.passwordSchema` in recover-password. Four route files + `server/utils.ts`
-- [ ] **27. Extract shared moderation/upload helpers** (PP-4, M) — `moderateFields` + `validateAndUploadImage` used by both post and profile forms. `server/routes/post-routes.ts`, `server/routes/user-routes.ts`
-- [ ] **28. Extract token check/claim helpers** (PP-5, M) — shared across validate-account and recover-password; add the missing freshness predicate to validate-account. `server/routes/sign-up-routes.ts`, `server/routes/recover-password-routes.ts`
-- [ ] **29. Heading hierarchy** (UI-3, S) — h1 on the four /user pages and the post view. `templates/pages/user/*`, `templates/pages/post/view.tsx`
-- [ ] **30. Restore focus after HTMX swaps** (UI-4, M) — delegated `htmx:afterSwap` refocus of the first `[aria-invalid]` input / swapped action button. New snippet in `static/js/`
-- [ ] **31. Mobile footer + touch targets** (UI-5, UI-6, S) — auto-height footer under 640px; min-height bumps on flash-close, profile actions, tabs, pagination. `server/styles/css/*`
-- [ ] **32. Shared flash region for OOB errors** (UX-12, S) — permanent `#flash-region` in the layout; OOB `beforeend` into it. `templates/layouts/main-layout.tsx`, `templates/components/error-oob-fragment.tsx`
-- [ ] **33. Post photo alt text** (UI-7, S now / M proper) — generic "Photo posted by {author}" now; optional alt field on the post form later. Post render sites
-- [ ] **34. Guard the comment cap atomically** (PP-11, S) — guarded insert or transaction; reuse one count builder; drop the view's redundant count. `server/routes/post-routes.ts`
-- [ ] **35. Comment anchor on redirect** (UX-11, S) — `#comment-<uid>` + ids on comment items. `server/routes/post-routes.ts`, `templates/pages/post/view.tsx`
-- [ ] **36. DB re-check on the home feed** (SEC-5, S) — apply the authorize-style status/pwv check to the feed branch. `server/routes/public-routes.ts`
+Merge order: **#42 → #43 → #44 → #40 → #41 → docs PR** (#43 and #44 are stacked on #42's branch).
+
+- [x] **19. Full-page renders for no-JS form errors** (UX-2, M) — `utils.formErrorResponse` branches on `HX-Request`; every form error path renders a full page for plain posts. *(PR #42)*
+- [x] **20. Return-to destination through sign-in** (UX-3, M) — 401s carry a validated `?next=` through sign-in; open-redirects rejected. *(PR #40)*
+- [x] **21. New Post in nav + empty-feed CTA** (UX-4, S) — nav item for signed-in users; empty feed links to /posts/new. *(PR #40)*
+- [x] **22. Post actions return you to where you were** (UX-5, S/M) — validated `?return=` through edit/delete; published creates land on the new post's page. *(PR #43)*
+- [x] **23. Warn when a picked file is dropped on error re-render** (UX-6, S) — "Your photo needs to be re-selected." note when a failed submit carried a file. *(PR #42)*
+- [x] **24. Preserve typed input on 429s** (UX-8, M) — `onLimit` handlers re-render with the typed values (passwords never echoed). *(PR #42)*
+- [x] **25. Sort out GIF handling** (UX-9, S) — hints now state that animated GIFs become a still image. *(PR #42)*
+- [x] **26. Consolidate duplicated route helpers** (PP-3, S) — `displayImageUrl`, `POSTS_PER_PAGE`, `TOKEN_TTL_MS` in utils; recover-password composes `utils.passwordSchema`. *(PR #42)*
+- [x] **27. Extract shared moderation/upload helpers** (PP-4, M) — `server/routes/form-helpers.ts`: `moderateFields` + `validateAndUploadImage`, used by post + profile forms. *(PR #42)*
+- [x] **28. Extract token check/claim helpers** (PP-5, M) — `server/routes/token-helpers.ts`: `checkToken`/`claimToken` over both token tables; validate-account gained the freshness predicate. *(PR #44)*
+- [x] **29. Heading hierarchy** (UI-3, S) — h1 on the four /user pages *(PR #41)* and the post view *(PR #43)*.
+- [x] **30. Restore focus after HTMX swaps** (UI-4, M) — `static/js/focus-restore.js`: first `[aria-invalid]` input, else swapped profile-action button. *(PR #41)*
+- [x] **31. Mobile footer + touch targets** (UI-5, UI-6, S) — static auto-height footer on mobile; ≥32–41px hit areas on flash-close/actions/tabs/pagination. *(PR #41)*
+- [x] **32. Shared flash region for OOB errors** (UX-12, S) — permanent `#flash-region` in the layout; OOB errors append into it; transport errors reuse it. *(PR #41)*
+- [x] **33. Post photo alt text** (UI-7, S) — `utils.postPhotoAlt(authorName)` on all post images; alt form field remains future work. *(PR #43)*
+- [x] **34. Guard the comment cap atomically** (PP-11, S) — `FOR UPDATE` on the post row serializes comment inserts; redundant view count dropped. *(PR #43)*
+- [x] **35. Comment anchor on redirect** (UX-11, S) — comments carry `id="comment-<uid>"`; redirect targets the new comment's anchor. *(PR #43)*
+- [x] **36. DB re-check on the home feed** (SEC-5, S) — revoked/banned users get signed out and see the anonymous home page immediately. *(PR #40)*
 
 ## P3 — Cleanups & polish
 
