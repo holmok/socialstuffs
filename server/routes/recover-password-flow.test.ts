@@ -72,7 +72,7 @@ async function tokenClaimed(token: string) {
 }
 
 let ipCounter = 0
-function post(path: string, fields: Record<string, string>) {
+function post(path: string, fields: Record<string, string>, headers: Record<string, string> = {}) {
   ipCounter += 1
   return app.request(`http://localhost${path}`, {
     method: 'POST',
@@ -81,7 +81,8 @@ function post(path: string, fields: Record<string, string>) {
       // csrf() requires a same-origin signal; request URL origin is http://localhost
       Origin: 'http://localhost',
       // unique per request so the per-IP rate limiter never trips across tests
-      'X-Forwarded-For': `10.1.0.${ipCounter}`
+      'X-Forwarded-For': `10.1.0.${ipCounter}`,
+      ...headers
     },
     body: new URLSearchParams(fields).toString()
   })
@@ -242,6 +243,28 @@ describe('POST /recover-password/:token/:uid', () => {
 
     expect(await passwordHashById(user.id)).toBe(user.passwordHash)
     expect(await tokenClaimed(token)).toBeNull()
+  })
+
+  test('an unexpected throw surfaces via the errorHandler (OOB flash, 500) instead of an in-form message', async () => {
+    // force the handler's token lookup to throw so the request hits the errorHandler
+    const selectFromSpy = spyOn(db, 'selectFrom').mockImplementation(() => {
+      throw new Error('forced reset failure')
+    })
+    try {
+      const res = await post(
+        `/recover-password/sometoken/some-uid`,
+        { password: STRONG_PASSWORD, confirmPassword: STRONG_PASSWORD },
+        { 'HX-Request': 'true' }
+      )
+      expect(res.status).toBe(500)
+      expect(res.headers.get('HX-Reswap')).toBe('none')
+      const body = await res.text()
+      expect(body).toContain('hx-swap-oob')
+      // the old catch-all rendered this in-form; unexpected errors no longer do
+      expect(body).not.toContain('An unexpected error occurred')
+    } finally {
+      selectFromSpy.mockRestore()
+    }
   })
 
   test('expired unclaimed token fails closed: failure page and password unchanged', async () => {

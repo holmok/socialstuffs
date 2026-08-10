@@ -151,8 +151,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
   user.post('/settings', async (c) => {
     const { logger, flash, auth, db, api, config } = c.var
-    const formData = await c.req.formData()
-    const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    const form = await utils.formStrings(c)
     // HTMX failures re-render the form fragment; no-JS failures re-render the full page (mirrors
     // GET /user/settings). Only username/email are echoed back — passwords never are
     const rerender = (errors: Record<string, string[]>) =>
