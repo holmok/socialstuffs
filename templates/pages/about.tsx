@@ -50,9 +50,9 @@ const AboutPage = () => {
           click the other one if you change your mind.
         </p>
         <p>
-          You can rate up to a hundred people this way. This sounds low until you try to name a hundred people you actually know.
-          Profiles do show how many approvals and disapprovals someone has collected. So when you are looking at a person's
-          profile or your own, you can see how many approvals and disapprovals there are.
+          You can approve up to fifty people and disapprove up to fifty people this way. This sounds low until you try to name a
+          hundred people you actually know. Profiles do show how many approvals and disapprovals someone has collected. So when
+          you are looking at a person's profile or your own, you can see how many approvals and disapprovals there are.
         </p>
       </section>
 
