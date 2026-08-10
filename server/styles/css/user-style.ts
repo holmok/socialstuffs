@@ -1,5 +1,6 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { accentButton, avatar, cardSurface } from '../_mixins'
 import * as vars from '../_vars'
 
 export default {
@@ -27,11 +28,6 @@ export default {
     whiteSpace: 'nowrap',
     borderRadius: vars.borderRadiusSmall
   },
-  '.form-note': {
-    fontSize: vars.fontSizeSmall,
-    color: colors.fgMuted,
-    marginBottom: vars.spacingMid
-  },
   // rendered as an h1 for the page outline; overrides the global h1 style to keep the old h2 look
   '.user-heading': {
     fontSize: '1.5em',
@@ -42,22 +38,15 @@ export default {
     textAlign: 'center'
   },
   '.profile-card': {
-    backgroundColor: colors.bgSurface,
-    border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
-    borderRadius: vars.borderRadiusMain,
-    padding: vars.spacingMain,
+    ...cardSurface,
     maxWidth: vars.maxWidthForm,
     margin: '0 auto',
     textAlign: 'center'
   },
   '.profile-avatar': {
+    ...avatar(192),
     display: 'block',
-    width: '192px',
-    height: '192px',
-    objectFit: 'cover',
-    borderRadius: '50%',
-    margin: `0 auto ${vars.spacingMid}`,
-    backgroundColor: colors.bgSurfaceLight
+    margin: `0 auto ${vars.spacingMid}`
   },
   // rendered as an h1 for the page outline; overrides the global h1 style to keep the old h2 look
   // (the public profile page re-overrides these via .profile-side .profile-name)
@@ -125,9 +114,7 @@ export default {
   },
   // stands out against the card surface (mirrors the .form submit style)
   '.primary-button': {
-    backgroundColor: colors.accentOrange,
-    color: colors.bgMain,
-    fontWeight: '600'
+    ...accentButton
   },
   '.primary-button:hover': {
     backgroundColor: colors.fgAccent
@@ -148,54 +135,6 @@ export default {
   },
   '.danger-card': {
     borderColor: colors.fgError
-  },
-  '.danger-button': {
-    backgroundColor: 'transparent',
-    color: colors.fgError,
-    border: `${vars.borderWidthMain} solid ${colors.fgError}`
-  },
-  '.danger-button:hover': {
-    backgroundColor: colors.bgError
-  },
-  '.danger-button:disabled': {
-    opacity: '0.5',
-    cursor: 'not-allowed'
-  },
-  '.danger-button:disabled:hover': {
-    backgroundColor: 'transparent'
-  },
-  '.delete-modal': {
-    backgroundColor: colors.bgSurface,
-    color: colors.fgMain,
-    border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
-    borderRadius: vars.borderRadiusMain,
-    padding: vars.spacingMain,
-    width: '90%',
-    maxWidth: '420px'
-  },
-  '.delete-modal::backdrop': {
-    backgroundColor: 'rgba(0, 0, 0, 0.6)'
-  },
-  '.delete-modal h3': {
-    marginBottom: vars.spacingSmall
-  },
-  '.delete-modal input': {
-    display: 'block',
-    width: '100%',
-    backgroundColor: colors.bgSurfaceLight,
-    color: colors.fgMain,
-    border: 'none',
-    borderRadius: vars.borderRadiusSmall,
-    padding: vars.spacingSmall,
-    marginBottom: vars.spacingMain
-  },
-  '.delete-modal input::placeholder': {
-    color: colors.fgMutedMore
-  },
-  '.modal-actions': {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: vars.spacingSmall
   },
   '.user-tab a:hover': {
     color: colors.fgMain

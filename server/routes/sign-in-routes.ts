@@ -71,7 +71,7 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
       return signInError(c, form.email, result.errors, form.next)
     } else {
       const { data } = result
-      const { db, logger, auth, flash } = c.var
+      const { db, logger, auth, flash, session } = c.var
 
       const normalizedEmail = normalizeEmail(data.email)
 
@@ -129,6 +129,9 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
 
       logger.info({ userId: user.id }, 'User signed in successfully')
 
+      // discard the anonymous session at the auth boundary (session fixation); must happen
+      // BEFORE the flash below or it would be written into the dropped session
+      await session.rotate()
       await flash.addFlash('success', 'You have signed in successfully.')
       return utils.redirect(c, safeNext(form.next) ?? '/')
     }

@@ -10,9 +10,7 @@ import profileStyles from './css/profile-style'
 import resetStyles from './css/reset-style'
 import userStyles from './css/user-style'
 
-export type style = 'global' | 'reset' | 'auth' | 'info' | 'error' | 'user' | 'profile' | 'home' | 'post'
-
-const stylesMap: Record<style, string> = {
+const stylesMap = {
   global: renderCSS(globalStyles),
   reset: renderCSS(resetStyles),
   auth: renderCSS(authStyles),
@@ -23,6 +21,8 @@ const stylesMap: Record<style, string> = {
   home: renderCSS(homeStyles),
   post: renderCSS(postStyles)
 }
+
+export type style = keyof typeof stylesMap
 
 const cachedStyleCombos: Record<string, string> = {}
 
@@ -53,19 +53,43 @@ function toKebabCase(str: string) {
   return str.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)
 }
 
-function renderCSS(styles: CSSObject): string {
-  let cssString = ''
+// nested selector objects flatten to descendant selectors ('.form' > 'label' emits '.form label')
+// rather than native CSS nesting, which browsers older than ~Chrome 120/Safari 17.2 silently drop.
+// Comma lists on either side expand to their cross product; at-rules keep wrapping their contents.
+export function renderCSS(styles: CSSObject): string {
+  return renderRules(styles, '').trim()
+}
 
-  for (const [property, value] of Object.entries(styles)) {
+function renderRules(obj: CSSObject, selector: string): string {
+  let declarations = ''
+  let nested = ''
+
+  for (const [key, value] of Object.entries(obj)) {
     if (value === undefined || value === null) continue
 
     if (typeof value === 'object') {
-      cssString += `${property} { ${renderCSS(value as CSSObject)} } `
+      if (key.startsWith('@')) {
+        nested += `${key} { ${renderRules(value as CSSObject, selector).trim()} } `
+      } else {
+        nested += renderRules(value as CSSObject, joinSelectors(selector, key))
+      }
     } else {
       const cssValue = typeof value === 'number' && value !== 0 ? `${value}px` : value
-      cssString += `${toKebabCase(property)}: ${cssValue}; `
+      declarations += `${toKebabCase(key)}: ${cssValue}; `
     }
   }
 
-  return cssString.trim()
+  const rule = declarations && selector ? `${selector} { ${declarations.trim()} } ` : declarations
+  return rule + nested
+}
+
+function joinSelectors(parent: string, child: string): string {
+  if (!parent) return child
+  const combos: string[] = []
+  for (const p of parent.split(',')) {
+    for (const c of child.split(',')) {
+      combos.push(`${p.trim()} ${c.trim()}`)
+    }
+  }
+  return combos.join(', ')
 }

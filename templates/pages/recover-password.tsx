@@ -4,7 +4,7 @@ import RecoverPasswordForm, { type RecoverPasswordFormProps } from '@templates/c
 const RecoverPasswordPage = (props: RecoverPasswordFormProps = {}) => {
   return (
     <>
-      <h1>Recover Password</h1>
+      <h1 className="form-heading">Recover Password</h1>
       <p>Enter your email and, if it matches an account, we'll send a password reset link.</p>
       <RecoverPasswordForm {...props} />
     </>

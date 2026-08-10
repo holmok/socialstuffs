@@ -375,6 +375,24 @@ describe('POST /user/settings — password change', () => {
     expect(stale.status).toBe(302)
     expect(stale.headers.get('location')).toBe('/sign-in?next=%2Fuser%2Fsettings')
 
+    // the revocation 401 path (signOut inside authorize(), then the thrown HTTPException) still
+    // delivers the cookies set before the throw: a rotated session cookie plus the flash marker,
+    // so the sign-in page the user lands on shows the notice
+    const staleSetCookies = stale.headers.getSetCookie()
+    expect(staleSetCookies.some((s) => s.startsWith(`${config.auth.sessionCookieName}=`))).toBe(true)
+    expect(staleSetCookies.some((s) => s.startsWith(`${config.auth.sessionCookieName}_f=1`))).toBe(true)
+    // emulate a browser jar: last Set-Cookie wins per name, Max-Age=0 drops the cookie
+    const jar = new Map<string, string>()
+    for (const s of staleSetCookies) {
+      const [pair] = s.split(';')
+      const eq = pair.indexOf('=')
+      if (s.includes('Max-Age=0')) jar.delete(pair.slice(0, eq))
+      else jar.set(pair.slice(0, eq), pair.slice(eq + 1))
+    }
+    const signInPage = await get('/sign-in?next=%2Fuser%2Fsettings', [...jar].map(([k, v]) => `${k}=${v}`).join('; '))
+    expect(signInPage.status).toBe(200)
+    expect(await signInPage.text()).toContain('You must be signed in to access that page.')
+
     // old password no longer signs in, new one does
     const oldPw = await post('/sign-in', { email: user.email, password: PASSWORD })
     expect(await oldPw.text()).toContain('Invalid sign in.')
@@ -458,7 +476,7 @@ describe('POST /user/settings — email change', () => {
 
 async function profileInfo(userId: number): Promise<UserProfileInfo> {
   const row = await db.selectFrom('users').select(['info']).where('id', '=', userId).executeTakeFirstOrThrow()
-  return row.info as UserProfileInfo
+  return row.info
 }
 
 const PROFILE_FIELDS = { fullname: 'Chris Example', title: 'Builder', location: 'Portland', bio: 'I make things.' }

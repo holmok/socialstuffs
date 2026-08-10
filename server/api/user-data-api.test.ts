@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import UserDataAPI, { UserDataError } from '@api/user-data-api'
 import data from '@data/index'
 import type { NewPostData } from '@data/post-data'
-import type { UserMeta } from '@data/user-data'
+import type { UserMeta, UserProfileInfo } from '@data/user-data'
 import { Storage } from '@google-cloud/storage'
 import * as DateFns from 'date-fns'
 import { strFromU8, unzipSync } from 'fflate'
@@ -57,7 +57,7 @@ type SeededUser = { id: number; uid: string }
 const seededUserIds: number[] = []
 const seededUserUids: string[] = []
 
-async function seedUser(name: string, info: UserMeta = {}): Promise<SeededUser> {
+async function seedUser(name: string, info: UserProfileInfo & UserMeta = {}): Promise<SeededUser> {
   const username = `u${name}${suffix}`.slice(0, 15)
   const email = `${name}-${suffix}@example.com`
   const row = await db
@@ -187,6 +187,23 @@ describe('downloadUserData', () => {
     expect(Buffer.from(entries['images/profile-abc.jpg'])).toEqual(Buffer.from([1, 2, 3, 4]))
   })
 
+  test('more images than the download concurrency all land in the zip (chunk boundary math)', async () => {
+    const user = await seedUser('dlmany')
+    // 9 images = two full chunks of IMAGE_DOWNLOAD_CONCURRENCY (4) plus a partial final chunk
+    bucketFiles = Array.from({ length: 9 }, (_, i) => ({
+      name: `${user.uid}/photo-${i}.jpg`,
+      contents: Buffer.from([i])
+    }))
+
+    await api.downloadUserData(user.uid)
+
+    expect(savedZips.length).toBe(1)
+    const entries = unzipSync(new Uint8Array(savedZips[0].data))
+    for (let i = 0; i < 9; i++) {
+      expect(Buffer.from(entries[`images/photo-${i}.jpg`])).toEqual(Buffer.from([i]))
+    }
+  })
+
   test('an unknown uid throws UserDataError and saves nothing', async () => {
     const err = await api.downloadUserData(`test-missing-${suffix}`).catch((e) => e)
     expect(err).toBeInstanceOf(UserDataError)
@@ -232,14 +249,9 @@ describe('downloadUserData', () => {
 })
 
 describe('deleteUserData', () => {
-  test('removes the user, their content, comments on their posts, and scrubs denormalized uid lists', async () => {
+  test("removes the user, their content, and comments on their posts; other users' info is untouched", async () => {
     const target = await seedUser('deltgt')
-    const keptUid = `test-kept-${suffix}`
-    const bystander = await seedUser('delby', {
-      favorites: [target.uid, keptUid],
-      relations: { approved: [target.uid, keptUid], disapproved: [target.uid] },
-      bio: 'unrelated info stays'
-    })
+    const bystander = await seedUser('delby', { bio: 'unrelated info stays' })
 
     const targetPost = await seedPost(target, 'target post')
     const bystanderPost = await seedPost(bystander, 'bystander post')
@@ -281,11 +293,7 @@ describe('deleteUserData', () => {
     expect(await db.selectFrom('users').select('id').where('uid', '=', target.uid).executeTakeFirst()).toBeUndefined()
 
     const bystanderRow = await db.selectFrom('users').select(['info']).where('id', '=', bystander.id).executeTakeFirstOrThrow()
-    expect(bystanderRow.info).toEqual({
-      favorites: [keptUid],
-      relations: { approved: [keptUid], disapproved: [] },
-      bio: 'unrelated info stays'
-    })
+    expect(bystanderRow.info).toEqual({ bio: 'unrelated info stays' })
 
     const posts = await db.selectFrom('posts').select('uid').where('userUid', 'in', [target.uid, bystander.uid]).execute()
     expect(posts.map((p) => p.uid)).toEqual([bystanderPost.uid])

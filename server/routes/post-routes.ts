@@ -1,6 +1,5 @@
 import CommentForm from '@components/post/comment-form'
 import PostForm, { createStatusOptions, editStatusOptions } from '@components/post/post-form'
-import type { UserProfileInfo } from '@data/user-data'
 import EditPostPage from '@pages/post/edit'
 import NewPostPage from '@pages/post/new'
 import PostViewPage, { type PostComment } from '@pages/post/view'
@@ -226,8 +225,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
       {
         title: 'Edit Post',
         description: 'Edit your post.',
-        // 'user' carries the shared delete-modal styling
-        styles: ['user', 'auth']
+        styles: ['auth']
       }
     )
   })
@@ -261,8 +259,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
           errors,
           imageDroppedNote
         }),
-        // 'user' carries the shared delete-modal styling
-        { title: 'Edit Post', description: 'Edit your post.', styles: ['user', 'auth'] }
+        { title: 'Edit Post', description: 'Edit your post.', styles: ['auth'] }
       )
     const result = await processPostForm(c, user.uid, editPostSchema, rerender)
     if ('response' in result) return result.response
@@ -347,10 +344,10 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         .executeTakeFirst()
     ])
 
-    const authorInfo = post.authorInfo as UserProfileInfo
+    const authorInfo = post.authorInfo
     const authorName = authorInfo.fullname ?? post.authorUsername
     const comments: PostComment[] = commentRows.map((row) => {
-      const info = row.authorInfo as UserProfileInfo
+      const info = row.authorInfo
       return {
         uid: row.uid,
         content: row.content,

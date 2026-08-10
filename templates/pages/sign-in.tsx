@@ -4,7 +4,7 @@ import SignInForm, { type SignInFormProps } from '@templates/components/sign-in-
 const SignInPage = (props: SignInFormProps = {}) => {
   return (
     <>
-      <h1>Sign In</h1>
+      <h1 className="form-heading">Sign In</h1>
       <SignInForm {...props} />
     </>
   )

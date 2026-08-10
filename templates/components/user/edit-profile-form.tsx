@@ -96,12 +96,12 @@ const EditProfileForm = (props: EditProfileFormProps) => {
           data-charcount="bio-char-count"
           data-charmax="500"
           aria-invalid={bioErrors?.length ? 'true' : undefined}
-          aria-describedby={bioErrors?.length ? 'bio-errors' : undefined}
+          aria-describedby={bioErrors?.length ? 'bio-errors bio-char-count' : 'bio-char-count'}
           className={bioErrors?.length ? 'error' : undefined}
         >
           {props.bio}
         </textarea>
-        <p id="bio-char-count" className="char-count">
+        <p id="bio-char-count" className="char-count" aria-live="polite">
           {(props.bio ?? '').length}/500 characters
         </p>
         {bioErrors && bioErrors.length > 0 && (
@@ -113,7 +113,7 @@ const EditProfileForm = (props: EditProfileFormProps) => {
         )}
       </div>
       <button type="submit">Save Profile</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
     </form>

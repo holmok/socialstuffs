@@ -93,12 +93,12 @@ const PostForm = (props: PostFormProps) => {
           data-charcount="content-char-count"
           data-charmax="500"
           aria-invalid={contentErrors?.length ? 'true' : undefined}
-          aria-describedby={contentErrors?.length ? 'content-errors' : undefined}
+          aria-describedby={contentErrors?.length ? 'content-errors content-char-count' : 'content-char-count'}
           className={contentErrors?.length ? 'error' : undefined}
         >
           {props.content}
         </textarea>
-        <p id="content-char-count" className="char-count">
+        <p id="content-char-count" className="char-count" aria-live="polite">
           {(props.content ?? '').length}/500 characters
         </p>
         {contentErrors && contentErrors.length > 0 && (
@@ -113,7 +113,7 @@ const PostForm = (props: PostFormProps) => {
         <img
           id="post-image-preview"
           className="post-image-preview"
-          src={imageUrl ?? ''}
+          src={imageUrl}
           alt="Preview of your selection"
           hidden={imageUrl == null}
         />
@@ -186,7 +186,7 @@ const PostForm = (props: PostFormProps) => {
         <SelectErrors id="status-errors" errors={props.errors?.status} />
       </div>
       <button type="submit">{submitLabel}</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
       {props.showDelete && (

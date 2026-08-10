@@ -45,8 +45,12 @@ const SetPasswordForm = (props: SetPasswordFormProps) => {
         autocomplete="new-password"
         required
       />
+      <p className="form-note">
+        Passwords need at least 10 characters with an uppercase letter, a lowercase letter, a number, and a special character — no
+        spaces.
+      </p>
       <button type="submit">Reset Password</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
     </form>

@@ -46,13 +46,13 @@ const SignInForm = (props: SignInFormProps) => {
         label="Password"
         type="password"
         errors={props.errors?.password}
-        placeholder="Enter a strong password..."
+        placeholder="Enter your password..."
         autocomplete="current-password"
         required
       />
 
       <button type="submit">Sign In</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
       <p className="form-alt">

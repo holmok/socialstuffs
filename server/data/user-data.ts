@@ -26,7 +26,8 @@ export type UserTable = {
   updated: ColumnType<Date, never, Date>
   status: ColumnType<UserStatus, never, UserStatus>
   role: ColumnType<UserRole, never, UserRole>
-  info: ColumnType<UserMeta, never, UserMeta>
+  // the open-record intersection keeps unknown keys (present in older rows) surviving round-trips
+  info: ColumnType<UserProfileInfo & UserMeta, never, UserProfileInfo & UserMeta>
   preferences: ColumnType<UserMeta, never, UserMeta>
   lastLogin: ColumnType<Date | null, never, Date>
 }

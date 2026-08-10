@@ -99,6 +99,11 @@ export function authenticate(): MiddlewareHandler {
           secure: config.mode.isProd,
           maxAge: 0
         })
+        // the session must not outlive the authenticated user: rotate() drops its kv rows and
+        // re-keys the cookie. Callers must addFlash AFTER signOut so the flash lands in the new
+        // session. Guarded because session() registers after authenticate() — bare test apps
+        // may run authenticate() without a session context.
+        if (c.var.session) await c.var.session.rotate()
       }
     }
     c.set('auth', auth)

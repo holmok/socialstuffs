@@ -1,5 +1,6 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { accentButton, cardSurface, hairline } from '../_mixins'
 import * as vars from '../_vars'
 
 const sectionGap = `calc(${vars.spacingMain} * 2)`
@@ -46,10 +47,8 @@ export default {
     marginTop: vars.spacingMain
   },
   '.cta': {
+    ...accentButton,
     display: 'inline-block',
-    backgroundColor: colors.accentOrange,
-    color: colors.bgMain,
-    fontWeight: '600',
     padding: `${vars.spacingSmall} ${vars.spacingMain}`,
     borderRadius: vars.borderRadiusSmall,
     textDecoration: 'none',
@@ -63,7 +62,7 @@ export default {
   },
   '.cta.quiet': {
     backgroundColor: 'transparent',
-    border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
+    border: hairline,
     color: colors.fgMain
   },
   '.cta.quiet:hover': {
@@ -93,10 +92,7 @@ export default {
     gridTemplateColumns: '1fr 1fr',
     gap: vars.spacingMain,
     li: {
-      backgroundColor: colors.bgSurface,
-      border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
-      borderRadius: vars.borderRadiusMain,
-      padding: vars.spacingMain
+      ...cardSurface
     },
     h3: {
       marginBottom: vars.spacingVerySmall
@@ -108,7 +104,7 @@ export default {
   },
   '.closing': {
     marginTop: sectionGap,
-    borderTop: `${vars.borderWidthMain} solid ${colors.borderColor}`,
+    borderTop: hairline,
     padding: `${sectionGap} 0 ${vars.spacingMain}`,
     textAlign: 'center'
   },
@@ -140,10 +136,7 @@ export default {
   },
   '.never': {
     marginTop: sectionGap,
-    backgroundColor: colors.bgSurface,
-    border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
-    borderRadius: vars.borderRadiusMain,
-    padding: vars.spacingMain,
+    ...cardSurface,
     h2: {
       margin: `0 0 ${vars.spacingMain}`
     },

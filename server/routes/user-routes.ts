@@ -54,7 +54,8 @@ export default function UserRoutes(app: Hono, logger: Logger) {
   user.get('/', async (c) => {
     const dbUser = await c.var.auth.getUser()
     if (dbUser == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
-    const info = (dbUser.info ?? {}) as UserProfileInfo
+    // copy before mutating: getUser() memoizes the row, so writing through would leak into other reads
+    const info = { ...dbUser.info }
     info.profileImageUrl = utils.displayImageUrl(info, c.var.config.baseImageUrl)
     return c.render(MyProfilePage({ uid: dbUser.uid, username: dbUser.username, created: dbUser.created, info }), {
       title: 'My Profile',
@@ -65,7 +66,8 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
   user.get('/edit-profile', async (c) => {
     const dbUser = await c.var.auth.getUser()
-    const info = (dbUser?.info ?? {}) as UserProfileInfo
+    // copy before mutating: getUser() memoizes the row, so writing through would leak into other reads
+    const info: UserProfileInfo = { ...dbUser?.info }
     info.profileImageUrl = utils.displayImageUrl(info, c.var.config.baseImageUrl)
     return c.render(EditProfilePage({ info }), {
       title: 'Edit Profile',
@@ -85,7 +87,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
     const user = await auth.getUser()
     if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
-    const currentInfo = user.info as UserProfileInfo
+    const currentInfo = user.info
     const currentImageUrl = utils.displayImageUrl(currentInfo, config.baseImageUrl)
 
     // browsers can't restore a picked file into a re-rendered form, so failures unrelated to the
@@ -134,7 +136,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     await db.updateTable('users').set({ info }).where('id', '=', user.id).execute()
 
     logger.info({ uid: user.uid }, 'Profile updated')
-    await flash.addFlash('info', 'Profile updated.')
+    await flash.addFlash('success', 'Profile updated.')
     return utils.redirect(c, '/user/edit-profile')
   })
 
@@ -315,14 +317,13 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
     logger.info({ uid: auth.user?.uid, changed }, 'Settings updated')
 
-    await flash.addFlash('info', changed ? 'Settings updated successfully.' : 'No changes made.')
+    await flash.addFlash(changed ? 'success' : 'info', changed ? 'Settings updated successfully.' : 'No changes made.')
     return utils.redirect(c, '/user/settings')
   })
 
   user.get('/data', async (c) => {
     const dbUser = await c.var.auth.getUser()
-    const info = (dbUser?.info ?? {}) as UserProfileInfo
-    return c.render(UserDataPage({ lastExportUrl: info.lastExportUrl }), {
+    return c.render(UserDataPage({ lastExportUrl: dbUser?.info.lastExportUrl }), {
       title: 'My Data',
       description: 'This is my data page.',
       styles: ['user']
@@ -336,7 +337,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
     try {
       const url = await api.userData.downloadUserData(user.uid)
-      const info: UserProfileInfo = { ...(user.info as UserProfileInfo), lastExportUrl: url }
+      const info: UserProfileInfo = { ...user.info, lastExportUrl: url }
       await db.updateTable('users').set({ info }).where('id', '=', user.id).execute()
       logger.info({ uid: user.uid }, 'User data export generated')
       await flash.addFlash('success', 'Your data export is ready — the download link is below.')
@@ -390,7 +391,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
     logger.info({ uid: user.uid }, 'User account deleted')
     await auth.signOut()
-    await flash.addFlash('info', 'Your account and all of your data have been deleted.')
+    await flash.addFlash('success', 'Your account and all of your data have been deleted.')
     return utils.redirect(c, '/')
   })
 

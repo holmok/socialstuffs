@@ -28,6 +28,7 @@ type ProfileUserPageProps = {
   created?: Date
   info: UserProfileInfo
   favorites: ProfileFavorite[]
+  hasMoreFavorites: boolean
   posts: ProfilePost[]
   page: number
   hasNewer: boolean
@@ -43,6 +44,7 @@ const ProfileUserPage = ({
   created,
   info,
   favorites,
+  hasMoreFavorites,
   posts,
   page,
   hasNewer,
@@ -68,15 +70,22 @@ const ProfileUserPage = ({
           {favorites.length === 0 ? (
             <p className="profile-empty">No favorites yet.</p>
           ) : (
-            <ul className="profile-favorites">
-              {favorites.map((favorite) => (
-                <li key={favorite.uid}>
-                  <a href={`/profile/${favorite.uid}`} title={favorite.name} aria-label={`View the profile of ${favorite.name}`}>
-                    <img className="profile-favorite-avatar" src={favorite.imageUrl} alt="" loading="lazy" />
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="profile-favorites">
+                {favorites.map((favorite) => (
+                  <li key={favorite.uid}>
+                    <a
+                      href={`/profile/${favorite.uid}`}
+                      title={favorite.name}
+                      aria-label={`View the profile of ${favorite.name}`}
+                    >
+                      <img className="profile-favorite-avatar" src={favorite.imageUrl} alt="" loading="lazy" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              {hasMoreFavorites && <p className="profile-empty">…and more</p>}
+            </>
           )}
         </section>
         <section className="profile-section">
