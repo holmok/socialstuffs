@@ -1,8 +1,10 @@
 import TextInput from '@components/text-input'
 import type { UserProfileInfo } from '@data/user-data'
 
-type EditProfileFormProps = UserProfileInfo & {
+export type EditProfileFormProps = UserProfileInfo & {
   errors?: Record<string, string[]>
+  // shown on error re-renders when the failed submit included a photo the browser can't restore
+  imageDroppedNote?: boolean
 }
 
 const EditProfileForm = (props: EditProfileFormProps) => {
@@ -47,7 +49,8 @@ const EditProfileForm = (props: EditProfileFormProps) => {
         <span id="image-file-name" className="file-name">
           No file selected
         </span>
-        <p className="form-note">JPEG, PNG, or GIF up to 20MB.</p>
+        <p className="form-note">JPEG, PNG, or GIF up to 20MB (animated GIFs become a still image).</p>
+        {props.imageDroppedNote && <p className="form-note">Your photo needs to be re-selected.</p>}
         {imageErrors && imageErrors.length > 0 && (
           <ul id="image-errors" className="errors">
             {imageErrors.map((error, index) => (

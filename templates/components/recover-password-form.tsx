@@ -1,6 +1,6 @@
 import TextInput from './text-input'
 
-type RecoverPasswordFormProps = {
+export type RecoverPasswordFormProps = {
   email?: string
   errors?: Record<string, string[]>
 }

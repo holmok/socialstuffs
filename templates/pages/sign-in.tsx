@@ -1,10 +1,11 @@
-import SignInForm from '@templates/components/sign-in-form'
+import SignInForm, { type SignInFormProps } from '@templates/components/sign-in-form'
 
-const SignInPage = () => {
+// form props flow through so no-JS error re-renders of the full page keep the typed values
+const SignInPage = (props: SignInFormProps = {}) => {
   return (
     <>
       <h1>Sign In</h1>
-      <SignInForm />
+      <SignInForm {...props} />
     </>
   )
 }

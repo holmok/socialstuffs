@@ -9,14 +9,6 @@ import type { Context, Hono } from 'hono'
 import type { Logger } from 'pino'
 import * as utils from '@/utils'
 
-const POSTS_PER_PAGE = 5
-
-// users without an uploaded photo get the shared placeholder image from the bucket (mirrors profile-routes)
-function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
-  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
-  return info.profileImageUrl ?? new URL('profile.jpg', base).href
-}
-
 // published posts from the viewer themselves plus active authors in the viewer's circle (people the
 // viewer favorited or approved), the latter narrowed to what each post's audience lets the viewer
 // see (utils.audienceAllows); the viewer's own posts show regardless of audience
@@ -96,12 +88,12 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
       // id breaks ties so posts created in the same instant keep a stable order across pages
       .orderBy('posts.created', 'desc')
       .orderBy('posts.id', 'desc')
-      .limit(POSTS_PER_PAGE + 1)
-      .offset((page - 1) * POSTS_PER_PAGE)
+      .limit(utils.POSTS_PER_PAGE + 1)
+      .offset((page - 1) * utils.POSTS_PER_PAGE)
       .execute()
-    const hasOlder = rows.length > POSTS_PER_PAGE
+    const hasOlder = rows.length > utils.POSTS_PER_PAGE
 
-    const posts: FeedPost[] = rows.slice(0, POSTS_PER_PAGE).map((row) => {
+    const posts: FeedPost[] = rows.slice(0, utils.POSTS_PER_PAGE).map((row) => {
       const info = row.authorInfo as UserProfileInfo
       return {
         uid: row.uid,
@@ -115,7 +107,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
         author: {
           uid: row.authorUid,
           name: info.fullname ?? row.authorUsername,
-          imageUrl: displayImageUrl(info, config.baseImageUrl)
+          imageUrl: utils.displayImageUrl(info, config.baseImageUrl)
         }
       }
     })
