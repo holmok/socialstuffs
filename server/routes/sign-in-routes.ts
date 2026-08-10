@@ -103,9 +103,12 @@ export default function SignInRoutes(app: Hono, logger: Logger) {
         if (user.status === 'pending') {
           // correct password — a stuck-mid-validation user retrying is not a credential failure
           logger.warn({ userId: user.id }, 'Sign-in attempt for pending account')
-          return signInError(c, data.email, {
-            form: ['Please validate your email address before signing in. Need a new link? Use "Resend it" below.']
-          }, form.next)
+          return signInError(
+            c,
+            data.email,
+            { form: ['Please validate your email address before signing in. Need a new link? Use "Resend it" below.'] },
+            form.next
+          )
         }
 
         if (user.status !== 'active') {
