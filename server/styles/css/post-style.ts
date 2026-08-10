@@ -1,8 +1,7 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { avatar, hairline } from '../_mixins'
 import * as vars from '../_vars'
-
-const hairline = `${vars.borderWidthMain} solid ${colors.borderColor}`
 
 export default {
   '.post-page': {
@@ -40,11 +39,7 @@ export default {
     borderRadius: '50%'
   },
   '.comment-author-avatar': {
-    width: '28px',
-    height: '28px',
-    objectFit: 'cover',
-    borderRadius: '50%',
-    backgroundColor: colors.bgSurfaceLight,
+    ...avatar(28),
     border: hairline
   },
   '.comment-author:hover .comment-author-avatar': {

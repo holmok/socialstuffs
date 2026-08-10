@@ -1,8 +1,7 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { cardSurface, hairline } from '../_mixins'
 import * as vars from '../_vars'
-
-const delimiterBorder = `${vars.borderWidthMain} solid ${colors.borderColor}`
 
 export default {
   html: {
@@ -163,10 +162,88 @@ export default {
     color: colors.fgAccent
   },
   '.card': {
+    ...cardSurface
+  },
+  // small muted helper text used under form controls and inside cards/dialogs
+  '.form-note': {
+    fontSize: vars.fontSizeSmall,
+    color: colors.fgMuted,
+    marginBottom: vars.spacingMid
+  },
+  // skip-to-content link: visually hidden until keyboard focus lands on it
+  '.skip-link': {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    padding: 0,
+    margin: '-1px',
+    overflow: 'hidden',
+    clipPath: 'inset(50%)',
+    whiteSpace: 'nowrap'
+  },
+  // fixed above the fixed header (z-index 1) when focused
+  '.skip-link:focus': {
+    position: 'fixed',
+    top: vars.spacingSmall,
+    left: vars.spacingSmall,
+    width: 'auto',
+    height: 'auto',
+    margin: '0',
+    padding: `${vars.spacingSmall} ${vars.spacingMain}`,
+    overflow: 'visible',
+    clipPath: 'none',
+    zIndex: '2',
     backgroundColor: colors.bgSurface,
-    border: delimiterBorder,
-    borderRadius: vars.borderRadiusMain,
-    padding: vars.spacingMain
+    color: colors.fgMain,
+    borderRadius: vars.borderRadiusSmall,
+    textDecoration: 'none'
+  },
+  // confirm dialogs (post delete, account delete) — shared by every dialog-using page
+  '.delete-modal': {
+    ...cardSurface,
+    color: colors.fgMain,
+    width: '90%',
+    maxWidth: '420px'
+  },
+  '.delete-modal::backdrop': {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)'
+  },
+  '.delete-modal h3': {
+    marginBottom: vars.spacingSmall
+  },
+  '.delete-modal input': {
+    display: 'block',
+    width: '100%',
+    backgroundColor: colors.bgSurfaceLight,
+    color: colors.fgMain,
+    border: 'none',
+    borderRadius: vars.borderRadiusSmall,
+    padding: vars.spacingSmall,
+    marginBottom: vars.spacingMain
+  },
+  '.delete-modal input::placeholder': {
+    color: colors.fgMutedMore
+  },
+  '.modal-actions': {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: vars.spacingSmall
+  },
+  // outlined destructive action, used inside the confirm dialogs and the user data page
+  '.danger-button': {
+    backgroundColor: 'transparent',
+    color: colors.fgError,
+    border: `${vars.borderWidthMain} solid ${colors.fgError}`
+  },
+  '.danger-button:hover': {
+    backgroundColor: colors.bgError
+  },
+  '.danger-button:disabled': {
+    opacity: '0.5',
+    cursor: 'not-allowed'
+  },
+  '.danger-button:disabled:hover': {
+    backgroundColor: 'transparent'
   },
   header: {
     position: 'fixed',
@@ -175,13 +252,13 @@ export default {
     right: '0',
     height: vars.headerHeight,
     backgroundColor: colors.bgMain,
-    borderBottom: delimiterBorder,
+    borderBottom: hairline,
     zIndex: '1'
   },
   footer: {
     height: vars.footerHeight,
     backgroundColor: colors.bgMain,
-    borderTop: delimiterBorder,
+    borderTop: hairline,
     zIndex: '1',
     position: 'fixed',
     bottom: '0',
@@ -281,12 +358,12 @@ export default {
       flexDirection: 'column',
       gap: '0',
       backgroundColor: colors.bgMain,
-      borderBottom: delimiterBorder,
+      borderBottom: hairline,
       padding: `${vars.spacingSmall} 0`
     },
     'nav ul.open': {
       display: 'flex',
-      borderTop: delimiterBorder,
+      borderTop: hairline,
       zIndex: '1'
     },
     'nav a': {

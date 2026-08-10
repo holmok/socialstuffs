@@ -1,5 +1,6 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { avatar, hairline } from '../_mixins'
 import * as vars from '../_vars'
 
 export default {
@@ -22,12 +23,8 @@ export default {
     borderRadius: '50%'
   },
   '.feed-author-avatar': {
-    width: '36px',
-    height: '36px',
-    objectFit: 'cover',
-    borderRadius: '50%',
-    backgroundColor: colors.bgSurfaceLight,
-    border: `${vars.borderWidthMain} solid ${colors.borderColor}`
+    ...avatar(36),
+    border: hairline
   },
   '.feed-author:hover .feed-author-avatar': {
     borderColor: colors.accentOrange

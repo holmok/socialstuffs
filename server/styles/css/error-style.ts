@@ -1,5 +1,6 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { cardSurface } from '../_mixins'
 import * as vars from '../_vars'
 
 const sectionGap = `calc(${vars.spacingMain} * 2)`
@@ -35,13 +36,10 @@ export default {
       marginTop: vars.spacingMain
     },
     '.error-detail': {
+      ...cardSurface,
       textAlign: 'left',
-      backgroundColor: colors.bgSurface,
-      border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
       color: colors.fgMuted,
       fontSize: vars.fontSizeSmall,
-      padding: vars.spacingMain,
-      borderRadius: vars.borderRadiusMain,
       marginTop: sectionGap,
       overflowX: 'auto'
     }
