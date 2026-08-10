@@ -10,10 +10,13 @@ import type { ExpressionBuilder } from 'kysely'
 import type { Logger } from 'pino'
 import { z } from 'zod'
 
-export function redirect(c: Context, path: string) {
+// refresh: pass true when the target can be the current page plus a hash — htmx assigns
+// location.href, which only scrolls on a hash-only change; HX-Refresh forces the reload
+export function redirect(c: Context, path: string, opts?: { refresh?: boolean }) {
   const isHtmx = c.req.header('HX-Request') === 'true'
   if (isHtmx) {
     c.header('HX-Redirect', path)
+    if (opts?.refresh) c.header('HX-Refresh', 'true')
     return c.body(null, 204)
   } else {
     return c.redirect(path, 303)

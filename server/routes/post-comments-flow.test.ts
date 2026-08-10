@@ -44,7 +44,7 @@ async function seedUser(name: string): Promise<SeededUser> {
 }
 
 let ipCounter = 0
-function postMultipart(path: string, fields: Record<string, string | File>, cookie?: string) {
+function postMultipart(path: string, fields: Record<string, string | File>, cookie?: string, headers?: Record<string, string>) {
   ipCounter += 1
   const body = new FormData()
   for (const [key, value] of Object.entries(fields)) body.append(key, value)
@@ -55,7 +55,8 @@ function postMultipart(path: string, fields: Record<string, string | File>, cook
       Origin: 'http://localhost',
       // unique per request so the per-IP rate limiter never trips across tests
       'X-Forwarded-For': `10.6.0.${ipCounter}`,
-      ...(cookie ? { cookie } : {})
+      ...(cookie ? { cookie } : {}),
+      ...headers
     },
     body
   })
@@ -224,6 +225,21 @@ describe('POST /posts/:uid/comments', () => {
     expect(body).toContain(`id="comment-${rows[1].uid}"`)
     // the commenter is named and linked on each comment
     expect(body).toContain(user.username)
+  })
+
+  test('an HTMX submit gets HX-Refresh alongside HX-Redirect so the hash-only navigation reloads', async () => {
+    const user = await seedUser('chx')
+    const cookie = await signIn(user)
+    const post = await createPost(cookie, user.id)
+
+    const res = await postMultipart(`/posts/${post.uid}/comments`, { content: `htmx comment ${suffix}` }, cookie, {
+      'HX-Request': 'true'
+    })
+    expect(res.status).toBe(204)
+    const rows = await commentsFor(post.id)
+    expect(rows.length).toBe(1)
+    expect(res.headers.get('HX-Redirect')).toBe(`/posts/${post.uid}#comment-${rows[0].uid}`)
+    expect(res.headers.get('HX-Refresh')).toBe('true')
   })
 
   test('empty content re-renders the form with the error before moderation', async () => {

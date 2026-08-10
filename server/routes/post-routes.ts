@@ -454,7 +454,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
 
     logger.info({ uid: user.uid, postUid: post.uid }, 'Comment added')
     await flash.addFlash('success', 'Comment added.')
-    // the fragment lands the full navigation (HX-Redirect included) on the new comment
-    return utils.redirect(c, `/posts/${post.uid}#comment-${commentUid}`)
+    // refresh: the viewer is already on this page, so a hash-only HX-Redirect would not reload
+    return utils.redirect(c, `/posts/${post.uid}#comment-${commentUid}`, { refresh: true })
   })
 }
