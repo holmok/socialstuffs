@@ -226,8 +226,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
       {
         title: 'Edit Post',
         description: 'Edit your post.',
-        // 'user' carries the shared delete-modal styling
-        styles: ['user', 'auth']
+        styles: ['auth']
       }
     )
   })
@@ -261,8 +260,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
           errors,
           imageDroppedNote
         }),
-        // 'user' carries the shared delete-modal styling
-        { title: 'Edit Post', description: 'Edit your post.', styles: ['user', 'auth'] }
+        { title: 'Edit Post', description: 'Edit your post.', styles: ['auth'] }
       )
     const result = await processPostForm(c, user.uid, editPostSchema, rerender)
     if ('response' in result) return result.response

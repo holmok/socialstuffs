@@ -134,7 +134,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     await db.updateTable('users').set({ info }).where('id', '=', user.id).execute()
 
     logger.info({ uid: user.uid }, 'Profile updated')
-    await flash.addFlash('info', 'Profile updated.')
+    await flash.addFlash('success', 'Profile updated.')
     return utils.redirect(c, '/user/edit-profile')
   })
 
@@ -316,7 +316,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
     logger.info({ uid: auth.user?.uid, changed }, 'Settings updated')
 
-    await flash.addFlash('info', changed ? 'Settings updated successfully.' : 'No changes made.')
+    await flash.addFlash(changed ? 'success' : 'info', changed ? 'Settings updated successfully.' : 'No changes made.')
     return utils.redirect(c, '/user/settings')
   })
 
@@ -391,7 +391,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
     logger.info({ uid: user.uid }, 'User account deleted')
     await auth.signOut()
-    await flash.addFlash('info', 'Your account and all of your data have been deleted.')
+    await flash.addFlash('success', 'Your account and all of your data have been deleted.')
     return utils.redirect(c, '/')
   })
 
