@@ -189,7 +189,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     try {
       // Note: response is identical across match/no-match/active, but the match path is
       // measurably slower (extra token insert + email send). Accepted: rate-limited, and only
-      // leaks "a pending account exists" — the same bit sign-up already exposes (audit F20).
+      // leaks "a pending account exists" — the same bit sign-up already exposes.
       const normalizedEmail = normalizeEmail(email)
       const user = await db
         .selectFrom('users')

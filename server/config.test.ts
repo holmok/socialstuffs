@@ -3,7 +3,7 @@ import pino from 'pino'
 import LoadConfig, { envSchema } from '@/config'
 
 // Builds a real pino logger from the config's pino options against a capture stream,
-// so we exercise the actual `redact` config LoadConfig() ships (F25 / tasks.md 3.5).
+// so we exercise the actual `redact` config LoadConfig() ships.
 function captureLog(record: Record<string, unknown>): Record<string, unknown> {
   const config = LoadConfig()
   const lines: string[] = []
@@ -57,14 +57,14 @@ describe('config pino redaction', () => {
 })
 
 describe('config poolConfig', () => {
-  test('sets pool timeouts (F33 / tasks.md 5.5)', () => {
+  test('sets pool timeouts', () => {
     const { poolConfig } = LoadConfig()
     expect(poolConfig.connectionTimeoutMillis).toBe(5000)
     expect(poolConfig.idleTimeoutMillis).toBe(30000)
   })
 })
 
-describe('config coerced numerics (F27 / tasks.md 6.2)', () => {
+describe('config coerced numerics', () => {
   test('numeric env vars are coerced to numbers', () => {
     const config = LoadConfig()
     expect(typeof config.server.port).toBe('number')

@@ -43,7 +43,7 @@ const formSchema = z.object({
   age: z.coerce.number().int().positive()
 })
 
-describe('validateFormData (F27 / tasks.md 6.2)', () => {
+describe('validateFormData', () => {
   test('returns success with parsed data for valid input', () => {
     const result = validateFormData({ email: 'a@b.com', age: '21' }, formSchema)
     expect(result.success).toBe(true)

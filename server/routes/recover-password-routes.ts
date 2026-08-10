@@ -71,7 +71,7 @@ export default function RecoverPasswordRoutes(app: Hono, logger: Logger) {
     try {
       // Note: response is identical across match/no-match/inactive, but the match path is
       // measurably slower (extra token insert + email send). Accepted: rate-limited, same
-      // residual timing side-channel as the resend-validation flow (audit F20).
+      // residual timing side-channel as the resend-validation flow.
       const normalizedEmail = normalizeEmail(email)
       const user = await db
         .selectFrom('users')
