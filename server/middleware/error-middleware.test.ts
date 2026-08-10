@@ -52,7 +52,7 @@ describe('errorHandler / notFoundHandler HTMX handling', () => {
     // Reswap:none tells htmx to leave the triggering form (and what the user typed) untouched.
     expect(res.headers.get('HX-Reswap')).toBe('none')
     // The error is delivered out-of-band as a flash, not as a body that replaces the target.
-    expect(body).toContain('hx-swap-oob="beforebegin:main"')
+    expect(body).toContain('hx-swap-oob="beforeend:#flash-region"')
     expect(body).toContain('flash-item flash-error')
     expect(body).not.toContain('class="error-fragment"')
   })

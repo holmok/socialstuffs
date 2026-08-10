@@ -18,7 +18,20 @@ document.addEventListener('click', (event) => {
 // glance away can't hide a failure — the close button clears any of them
 const FLASH_DISMISS_MS = 10000
 
+// OOB error fragments append their own .flash wrapper into #flash-region; merge
+// stray wrappers into the first one so repeated errors stack as items, not containers
+function consolidateFlashRegion() {
+  const region = document.getElementById('flash-region')
+  if (!region) return
+  const containers = region.querySelectorAll('.flash')
+  for (let i = 1; i < containers.length; i++) {
+    containers[0].append(...containers[i].children)
+    containers[i].remove()
+  }
+}
+
 function scheduleFlashDismissals() {
+  consolidateFlashRegion()
   for (const item of document.querySelectorAll('.flash-item:not([data-dismiss-scheduled])')) {
     item.dataset.dismissScheduled = 'true'
     if (item.classList.contains('flash-error')) continue
@@ -36,12 +49,12 @@ document.addEventListener('htmx:oobAfterSwap', scheduleFlashDismissals)
 // Surface transport-level htmx failures (server unreachable, request dropped)
 // as a native-looking, dismissible flash. Server HTTP errors are handled elsewhere.
 function showTransportError(message) {
-  let container = document.querySelector('.flash')
+  let container = document.querySelector('#flash-region .flash')
   if (!container) {
     container = document.createElement('div')
     container.className = 'flash'
-    const main = document.querySelector('main')
-    if (main?.parentNode) main.parentNode.insertBefore(container, main)
+    const region = document.getElementById('flash-region')
+    if (region) region.appendChild(container)
     else document.body.appendChild(container)
   }
 

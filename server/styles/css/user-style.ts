@@ -16,9 +16,11 @@ export default {
     margin: '0',
     padding: '0'
   },
+  // roomier vertical padding for a ~40px touch target; negative margin keeps the strip height
   '.user-tab a': {
     display: 'block',
-    padding: `${vars.spacingVerySmall} ${vars.spacingSmall}`,
+    padding: vars.spacingSmall,
+    margin: `-${vars.spacingVerySmall} 0`,
     color: colors.fgMuted,
     fontSize: vars.fontSizeSmall,
     textDecoration: 'none',
@@ -30,7 +32,12 @@ export default {
     color: colors.fgMuted,
     marginBottom: vars.spacingMid
   },
+  // rendered as an h1 for the page outline; overrides the global h1 style to keep the old h2 look
   '.user-heading': {
+    fontSize: '1.5em',
+    letterSpacing: '-0.01em',
+    lineHeight: '1.5',
+    paddingBottom: '0',
     marginBottom: vars.spacingMid,
     textAlign: 'center'
   },
@@ -52,7 +59,13 @@ export default {
     margin: `0 auto ${vars.spacingMid}`,
     backgroundColor: colors.bgSurfaceLight
   },
+  // rendered as an h1 for the page outline; overrides the global h1 style to keep the old h2 look
+  // (the public profile page re-overrides these via .profile-side .profile-name)
   '.profile-name': {
+    fontSize: '1.5em',
+    letterSpacing: '-0.01em',
+    lineHeight: '1.5',
+    paddingBottom: '0',
     margin: `0 0 ${vars.spacingVerySmall}`
   },
   '.profile-username': {
@@ -97,7 +110,9 @@ export default {
     maxWidth: vars.maxWidthForm,
     margin: `0 auto ${vars.spacingMain}`
   },
-  '.data-card h3': {
+  // card headings are h2s for the page outline but keep the old h3 size
+  '.data-card h2': {
+    fontSize: '1.17em',
     marginBottom: vars.spacingSmall
   },
   // the action buttons sit centered in their cards

@@ -106,6 +106,7 @@ export default {
     backgroundColor: colors.bgError,
     color: colors.fgError
   },
+  // sized as a comfortable touch target; negative margins keep the flash item's height and glyph position
   '.flash-close': {
     backgroundColor: 'transparent',
     color: 'inherit',
@@ -115,8 +116,12 @@ export default {
     border: 'none',
     flexShrink: '0',
     cursor: 'pointer',
-    position: 'relative',
-    top: '-2px'
+    minWidth: '32px',
+    minHeight: '32px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: `-${vars.spacingVerySmall} -${vars.spacingSmall} -${vars.spacingVerySmall} 0`
   },
   '.flash-close:hover': {
     backgroundColor: 'transparent',
@@ -248,6 +253,22 @@ export default {
     backgroundColor: 'transparent'
   },
   [`@media (max-width: ${vars.breakpointMobile})`]: {
+    // the fixed 52px footer overflows on narrow viewports once its links wrap;
+    // let it flow after the content (auto height) and drop the matching body padding
+    body: {
+      paddingBottom: '0'
+    },
+    footer: {
+      position: 'static',
+      height: 'auto'
+    },
+    '.footer-inner': {
+      height: 'auto',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: `0 ${vars.spacingSmall}`,
+      padding: `${vars.spacingSmall} ${vars.spacingMain}`
+    },
     '.nav-toggle': {
       display: 'block'
     },

@@ -29,6 +29,7 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <script src="/js/htmx.min.2.0.10.js" defer></script>
         <script src="/js/nav.js" defer></script>
         <script src="/js/flash.js" defer></script>
+        <script src="/js/focus-restore.js" defer></script>
         <script src="/js/image-preview.js" defer></script>
         <script src="/js/delete-confirm.js" defer></script>
         <script src="/js/lightbox.js" defer></script>
@@ -41,7 +42,8 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
       </head>
       <body id="top">
         <Header isAuthenticated={isAuthenticated} />
-        {flashes && <Flash flashes={flashes} />}
+        {/* permanent landing zone for flash messages, including OOB error fragments */}
+        <div id="flash-region">{flashes && <Flash flashes={flashes} />}</div>
         <main>{children}</main>
         <Footer />
       </body>

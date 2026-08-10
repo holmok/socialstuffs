@@ -6,7 +6,7 @@ const UserSettingsPage = (props: UserSettingsFormProps) => {
   return (
     <div>
       <UserTabs activeTab="settings" />
-      <h2 className="user-heading">Edit Settings</h2>
+      <h1 className="user-heading">Edit Settings</h1>
       <UserSettingsForm {...props} />
     </div>
   )

@@ -13,7 +13,7 @@ const UserEditProfilePage = ({ info, errors, imageDroppedNote }: UserEditProfile
   return (
     <div>
       <UserTabs activeTab="edit-profile" />
-      <h2 className="user-heading">Edit Profile</h2>
+      <h1 className="user-heading">Edit Profile</h1>
       <EditProfileForm {...info} errors={errors} imageDroppedNote={imageDroppedNote} />
     </div>
   )
