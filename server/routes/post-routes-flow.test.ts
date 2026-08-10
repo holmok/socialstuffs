@@ -157,15 +157,15 @@ describe('GET /posts/new', () => {
 })
 
 describe('POST /posts/new — create', () => {
-  test('publishes a post with its audience row and redirects to the profile', async () => {
+  test("publishes a post with its audience row and redirects to the new post's page", async () => {
     const user = await seedUser('npub')
     const cookie = await signIn(user)
 
     const res = await postMultipart('/posts/new', postFields({ audience: 'approved' }), cookie)
     expect(res.status).toBe(303)
-    expect(res.headers.get('location')).toBe(`/profile/${user.uid}`)
 
     const rows = await postsFor(user.id)
+    expect(res.headers.get('location')).toBe(`/posts/${rows[0].uid}`)
     expect(rows.length).toBe(1)
     expect(rows[0].content).toBe(`hello-${suffix}`)
     expect(rows[0].status).toBe('published')
@@ -186,12 +186,13 @@ describe('POST /posts/new — create', () => {
     expect(profile).not.toContain('(edited)')
   })
 
-  test('a draft is saved and listed on your own profile with its status', async () => {
+  test('a draft is saved, redirects to the profile (drafts have no page), and lists with its status', async () => {
     const user = await seedUser('ndft')
     const cookie = await signIn(user)
 
     const res = await postMultipart('/posts/new', postFields({ content: `drafty-${suffix}`, status: 'draft' }), cookie)
     expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe(`/profile/${user.uid}`)
 
     const rows = await postsFor(user.id)
     expect(rows[0].status).toBe('draft')
@@ -415,7 +416,7 @@ describe('GET /posts/:uid/edit', () => {
 })
 
 describe('POST /posts/:uid/edit', () => {
-  test('updates the fields and the audience row, then redirects to the profile', async () => {
+  test('updates the fields and the audience row, then falls back to the profile without a return param', async () => {
     const user = await seedUser('eupd')
     const cookie = await signIn(user)
     const post = await createPost(cookie, user.id, { audience: 'all', status: 'draft' })
@@ -537,6 +538,75 @@ describe('POST /posts/:uid/delete', () => {
   })
 })
 
+describe('return flow — post actions go back to where you were', () => {
+  test('the profile page Edit links carry the current page as a return param', async () => {
+    const user = await seedUser('rlink')
+    const cookie = await signIn(user)
+    const post = await createPost(cookie, user.id)
+
+    const profile = await (await get(`/profile/${user.uid}`, cookie)).text()
+    // page 1 omits ?p
+    expect(profile).toContain(`href="/posts/${post.uid}/edit?return=${encodeURIComponent(`/profile/${user.uid}`)}"`)
+
+    // five newer posts push the first one onto page 2, whose Edit link carries ?p=2
+    for (let i = 0; i < 5; i++) await createPost(cookie, user.id)
+    const paged = await (await get(`/profile/${user.uid}?p=2`, cookie)).text()
+    expect(paged).toContain(`href="/posts/${post.uid}/edit?return=${encodeURIComponent(`/profile/${user.uid}?p=2`)}"`)
+  })
+
+  test('the edit form and delete form keep the return param in their actions, including error re-renders', async () => {
+    const user = await seedUser('rform')
+    const cookie = await signIn(user)
+    const post = await createPost(cookie, user.id)
+    const returnQuery = `?return=${encodeURIComponent(`/profile/${user.uid}?p=2`)}`
+
+    const body = await (await get(`/posts/${post.uid}/edit${returnQuery}`, cookie)).text()
+    expect(body).toContain(`hx-post="/posts/${post.uid}/edit${returnQuery}"`)
+    expect(body).toContain(`action="/posts/${post.uid}/delete${returnQuery}"`)
+
+    // a failed submit (no-JS full page re-render) still addresses the return-carrying actions
+    const errored = await postMultipart(`/posts/${post.uid}/edit${returnQuery}`, postFields({ content: '   ' }), cookie)
+    expect(errored.status).toBe(200)
+    const erroredBody = await errored.text()
+    expect(erroredBody).toContain('Post text is required.')
+    expect(erroredBody).toContain(`hx-post="/posts/${post.uid}/edit${returnQuery}"`)
+    expect(erroredBody).toContain(`action="/posts/${post.uid}/delete${returnQuery}"`)
+  })
+
+  test('successful edit and delete redirect to the validated return destination', async () => {
+    const user = await seedUser('rgo')
+    const cookie = await signIn(user)
+    const post = await createPost(cookie, user.id)
+    const returnTo = `/profile/${user.uid}?p=2`
+    const returnQuery = `?return=${encodeURIComponent(returnTo)}`
+
+    const edited = await postMultipart(`/posts/${post.uid}/edit${returnQuery}`, postFields(), cookie)
+    expect(edited.status).toBe(303)
+    expect(edited.headers.get('location')).toBe(returnTo)
+
+    const deleted = await postMultipart(`/posts/${post.uid}/delete${returnQuery}`, {}, cookie)
+    expect(deleted.status).toBe(303)
+    expect(deleted.headers.get('location')).toBe(returnTo)
+  })
+
+  test('an unsafe return value is ignored and the profile fallback is used', async () => {
+    const user = await seedUser('rbad')
+    const cookie = await signIn(user)
+
+    for (const bad of ['https://evil.example.com/x', '//evil.example.com/x', '/ok/https://evil.example.com']) {
+      const post = await createPost(cookie, user.id)
+      const res = await postMultipart(`/posts/${post.uid}/edit?return=${encodeURIComponent(bad)}`, postFields(), cookie)
+      expect(res.status).toBe(303)
+      expect(res.headers.get('location')).toBe(`/profile/${user.uid}`)
+
+      // the edit page doesn't echo the unsafe value into its actions either
+      const body = await (await get(`/posts/${post.uid}/edit?return=${encodeURIComponent(bad)}`, cookie)).text()
+      expect(body).toContain(`hx-post="/posts/${post.uid}/edit"`)
+      expect(body).not.toContain('evil.example.com')
+    }
+  })
+})
+
 describe('Edit links on the profile page', () => {
   test("your own posts carry an edit link; someone else's do not", async () => {
     const user = await seedUser('elme')
@@ -545,11 +615,11 @@ describe('Edit links on the profile page', () => {
     const post = await createPost(cookie, user.id)
 
     const own = await (await get(`/profile/${user.uid}`, cookie)).text()
-    expect(own).toContain(`href="/posts/${post.uid}/edit"`)
+    expect(own).toContain(`href="/posts/${post.uid}/edit`)
 
     const viewerCookie = await signIn(viewer)
     const theirs = await (await get(`/profile/${user.uid}`, viewerCookie)).text()
-    expect(theirs).not.toContain(`href="/posts/${post.uid}/edit"`)
+    expect(theirs).not.toContain(`href="/posts/${post.uid}/edit`)
   })
 })
 
