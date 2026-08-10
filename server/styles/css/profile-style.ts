@@ -11,8 +11,11 @@ export default {
     gap: vars.spacingMain,
     alignItems: 'start'
   },
+  // re-asserts the h1 look here since user-style's .profile-name overrides it for the my-profile page
   '.profile-side .profile-name': {
     fontSize: vars.fontSizeMid,
+    letterSpacing: '-0.02em',
+    lineHeight: '1.2',
     paddingBottom: '0'
   },
   '#profile-actions': {
@@ -32,7 +35,8 @@ export default {
     border: hairline,
     color: colors.fgMutedMore,
     fontSize: vars.fontSizeSmall,
-    padding: `${vars.spacingVerySmall} ${vars.spacingSmall}`
+    // roomier vertical padding for a ~40px touch target
+    padding: vars.spacingSmall
   },
   '.profile-action:hover': {
     backgroundColor: colors.bgSurfaceLight,
@@ -181,7 +185,8 @@ export default {
     color: colors.fgMain,
     fontSize: vars.fontSizeSmall,
     fontWeight: '500',
-    padding: `${vars.spacingVerySmall} ${vars.spacingMid}`,
+    // roomier vertical padding for a ~40px touch target
+    padding: `${vars.spacingSmall} ${vars.spacingMid}`,
     borderRadius: vars.borderRadiusSmall,
     textDecoration: 'none'
   },

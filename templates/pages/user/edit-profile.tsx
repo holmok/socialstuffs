@@ -10,7 +10,7 @@ const UserEditProfilePage = ({ info }: UserEditProfilePageProps) => {
   return (
     <div>
       <UserTabs activeTab="edit-profile" />
-      <h2 className="user-heading">Edit Profile</h2>
+      <h1 className="user-heading">Edit Profile</h1>
       <EditProfileForm {...info} />
     </div>
   )

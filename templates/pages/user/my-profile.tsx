@@ -16,7 +16,7 @@ const UserMyProfilePage = ({ uid, username, created, info }: UserMyProfilePagePr
       <UserTabs activeTab="my-profile" />
       <div className="profile-card">
         <img className="profile-avatar" src={info.profileImageUrl} alt={`Avatar for ${username}`} />
-        <h2 className="profile-name">{info.fullname || username}</h2>
+        <h1 className="profile-name">{info.fullname || username}</h1>
         <p className="profile-username">@{username}</p>
         {meta && <p className="profile-meta">{meta}</p>}
         {info.bio && <p className="profile-bio">{info.bio}</p>}

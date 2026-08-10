@@ -15,9 +15,9 @@ const UserDataPage = ({ lastExportUrl }: UserDataPageProps) => {
   return (
     <div>
       <UserTabs activeTab="data" />
-      <h2 className="user-heading">My Data</h2>
+      <h1 className="user-heading">My Data</h1>
       <div className="card data-card">
-        <h3>Export My Data</h3>
+        <h2>Export My Data</h2>
         <p className="form-note">
           Download a zip of your profile, posts, comments, and images. You can generate one export per day.
         </p>
@@ -43,7 +43,7 @@ const UserDataPage = ({ lastExportUrl }: UserDataPageProps) => {
         </form>
       </div>
       <div className="card data-card danger-card">
-        <h3>Delete My Account</h3>
+        <h2>Delete My Account</h2>
         <p className="form-note">
           Permanently delete your account, posts, comments, favorites, and images. This cannot be undone.
         </p>
