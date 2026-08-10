@@ -1,4 +1,3 @@
-import type { UserProfileInfo } from '@data/user-data'
 import { passwordVersion } from '@middleware/auth-middleware'
 import AboutPage from '@pages/about'
 import ContactPage from '@templates/pages/contact'
@@ -104,7 +103,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
     const hasOlder = rows.length > utils.POSTS_PER_PAGE
 
     const posts: FeedPost[] = rows.slice(0, utils.POSTS_PER_PAGE).map((row) => {
-      const info = row.authorInfo as UserProfileInfo
+      const info = row.authorInfo
       return {
         uid: row.uid,
         content: row.content,
