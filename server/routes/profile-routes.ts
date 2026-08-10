@@ -10,6 +10,11 @@ import * as utils from '@/utils'
 // the profile favorites strip is a fixed-size teaser, not a full list — cap what one page load pulls in
 const FAVORITES_STRIP_LIMIT = 20
 
+// caps on outgoing relationships keep each user's graph (and the audience/feed subqueries that
+// walk it) bounded; clearing an existing favorite/relation is never blocked, only adding
+const MAX_FAVORITES = 10
+const RELATION_CAPS: Record<RelationType, number> = { approve: 50, disapprove: 50 }
+
 // posts visible on a profile: the owner sees all their non-deleted posts; anyone else sees only
 // published posts whose audience includes them (utils.audienceAllows)
 function profilePostsQuery(c: Context, profileUid: string, viewerUid: string) {
@@ -173,16 +178,33 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
     )
   })
 
-  // mutually exclusive toggle: same type again clears it, the other type switches it, none sets it
+  // mutually exclusive toggle: same type again clears it, the other type switches it, none sets it.
+  // Adding or switching to a type is capped; clearing is always allowed so a full list can shrink.
   const relate = (type: RelationType) => async (c: Context) => {
     const { viewer, target } = await loadParticipants(c)
     await c.var.db.transaction().execute(async (trx) => {
+      // serialize this user's relation writes so a double-submit can't sneak past the cap
+      // (same FOR UPDATE-on-the-parent-row pattern as the comment cap)
+      await trx.selectFrom('users').select('id').where('id', '=', viewer.id).forUpdate().execute()
       const existing = await trx
         .selectFrom('relations')
         .select(['id', 'type'])
         .where('userUid', '=', viewer.uid)
         .where('friendUid', '=', target.uid)
         .executeTakeFirst()
+      // both the fresh insert and the approve<->disapprove switch grow the target type's count
+      if (existing == null || existing.type !== type) {
+        const max = RELATION_CAPS[type]
+        const row = await trx
+          .selectFrom('relations')
+          .select((eb) => eb.fn.countAll<number>().as('total'))
+          .where('userUid', '=', viewer.uid)
+          .where('type', '=', type)
+          .executeTakeFirst()
+        if (Number(row?.total ?? 0) >= max) {
+          throw new HTTPException(400, { message: `You can ${type} at most ${max} people. Remove one first.` })
+        }
+      }
       if (existing == null) {
         await trx
           .insertInto('relations')
@@ -204,6 +226,8 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
   profile.post('/:uid/favorite', async (c) => {
     const { viewer, target } = await loadParticipants(c)
     await c.var.db.transaction().execute(async (trx) => {
+      // serialize this user's favorite writes so a double-submit can't sneak past the cap
+      await trx.selectFrom('users').select('id').where('id', '=', viewer.id).forUpdate().execute()
       const existing = await trx
         .selectFrom('favorites')
         .select(['id'])
@@ -211,6 +235,14 @@ export default function ProfileRoutes(app: Hono, logger: Logger) {
         .where('friendUid', '=', target.uid)
         .executeTakeFirst()
       if (existing == null) {
+        const row = await trx
+          .selectFrom('favorites')
+          .select((eb) => eb.fn.countAll<number>().as('total'))
+          .where('userUid', '=', viewer.uid)
+          .executeTakeFirst()
+        if (Number(row?.total ?? 0) >= MAX_FAVORITES) {
+          throw new HTTPException(400, { message: `You can favorite at most ${MAX_FAVORITES} people. Remove one first.` })
+        }
         await trx
           .insertInto('favorites')
           .values({ userId: viewer.id, userUid: viewer.uid, friendId: target.id, friendUid: target.uid })
