@@ -2,15 +2,15 @@
 
 Prioritized, reasonably small chunks. IDs reference [audit.md](audit.md). Effort: S ≈ under an hour, M ≈ a half-day.
 
-## P0 — Security holes & bugs
+## P0 — Security holes & bugs (all done 2026-08-09)
 
-- [ ] **1. Lock down data-export ZIPs** (SEC-1, M) — serve exports via an authenticated streaming route (or V4 signed URLs + random path segment); stop writing them to the public image bucket. `server/api/user-data-api.ts`, `server/routes/user-routes.ts`, `templates/pages/user/data.tsx`
-- [ ] **2. Require current password for sensitive changes** (SEC-2, M) — add a current-password field to settings; verify before password change, email change, and account deletion. `templates/components/user/settings-form.tsx`, `server/routes/user-routes.ts`
-- [ ] **3. Fix settings self-match uniqueness bug** (PP-1, S) — exclude the current user's id from the in-use checks; share one username-normalize helper with sign-up. `server/routes/user-routes.ts:228-255`
-- [ ] **4. Restrict `linkUrl` to http/https** (SEC-3, S) — tighten the Zod schema (and optionally scheme-check at render). `server/routes/post-routes.ts:27`
-- [ ] **5. Set `maxRequestBodySize` on Bun.serve (~25MB)** (SEC-6, S) — closes the 128MB pre-check buffering window. `server/index.ts`
-- [ ] **6. Cap decoded image dimensions** (PERF-1, S) — reject images over ~8000px/side after decode, before resize. `server/api/image-api.ts`
-- [ ] **7. Fix `throw new Response` → `HTTPException`** (PP-2, S) — five sites in `server/routes/user-routes.ts`
+- [x] **1. Lock down data-export ZIPs** (SEC-1, M) — export paths now carry a 32-char random token (capability URL, same model as image filenames); older exports — including legacy predictable paths — are deleted on the next export, and account deletion's glob covers both formats. `server/api/user-data-api.ts`
+- [x] **2. Require current password for sensitive changes** (SEC-2, M) — settings verifies the current password before email/password changes; the delete-account modal requires the password alongside typing "delete", re-verified server-side. `templates/components/user/settings-form.tsx`, `templates/pages/user/data.tsx`, `static/js/delete-confirm.js`, `server/routes/user-routes.ts`
+- [x] **3. Fix settings self-match uniqueness bug** (PP-1, S) — in-use checks exclude the current user's id; `utils.normalizeUsername` shared with sign-up. `server/routes/user-routes.ts`, `server/utils.ts`
+- [x] **4. Restrict `linkUrl` to http/https** (SEC-3, S) — Zod schema now protocol-restricted. `server/routes/post-routes.ts`
+- [x] **5. Set `maxRequestBodySize` on Bun.serve (25MB)** (SEC-6, S) — `server/index.ts`
+- [x] **6. Cap decoded image dimensions** (PERF-1, S) — 8000px/side, enforced by a header-only probe (PNG/GIF/JPEG) *before* decode so a decompression bomb never allocates, with a post-decode backstop. `server/api/image-api.ts`
+- [x] **7. Fix `throw new Response` → `HTTPException`** (PP-2, S) — five sites in `server/routes/user-routes.ts`
 
 ## P1 — High-impact quick wins
 

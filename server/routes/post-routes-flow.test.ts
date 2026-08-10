@@ -266,7 +266,19 @@ describe('POST /posts/new — validation and moderation', () => {
 
     const res = await postMultipart('/posts/new', postFields({ linkUrl: 'not-a-url' }), cookie)
     expect(res.status).toBe(200)
-    expect(await res.text()).toContain('Link URL must be a valid URL.')
+    expect(await res.text()).toContain('Link URL must be a valid http or https URL.')
+    expect((await postsFor(user.id)).length).toBe(0)
+  })
+
+  test('javascript: and data: link URLs are rejected', async () => {
+    const user = await seedUser('nxss')
+    const cookie = await signIn(user)
+
+    for (const linkUrl of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>']) {
+      const res = await postMultipart('/posts/new', postFields({ linkUrl }), cookie)
+      expect(res.status).toBe(200)
+      expect(await res.text()).toContain('Link URL must be a valid http or https URL.')
+    }
     expect((await postsFor(user.id)).length).toBe(0)
   })
 

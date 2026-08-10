@@ -48,6 +48,16 @@ const UserSettingsForm = (props: UserSettingsFormProps) => {
       />
       <p className="form-note">Changing your email signs you out until you verify the new address (we'll email you a link).</p>
       <TextInput
+        id="currentPassword"
+        name="currentPassword"
+        label="Current Password"
+        type="password"
+        errors={props.errors?.currentPassword}
+        placeholder="Enter your current password..."
+        autocomplete="current-password"
+      />
+      <p className="form-note">Required to change your email or password.</p>
+      <TextInput
         id="password"
         name="password"
         label="New Password"

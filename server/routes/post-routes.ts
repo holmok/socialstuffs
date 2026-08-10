@@ -24,7 +24,10 @@ const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif']
 
 const sharedPostFields = {
   content: z.string().trim().min(1, 'Post text is required.').max(500, 'Post text must be at most 500 characters long.'),
-  linkUrl: z.union([z.literal(''), z.url('Link URL must be a valid URL.')]).optional(),
+  // protocol-restricted: a stored javascript:/data: URL would render as a clickable link for other users
+  linkUrl: z
+    .union([z.literal(''), z.url({ protocol: /^https?$/, error: 'Link URL must be a valid http or https URL.' })])
+    .optional(),
   linkText: z.string().trim().max(100, 'Link text must be at most 100 characters long.').optional(),
   audience: z.enum(['all', 'non_disapproved', 'approved', 'favorites'], { error: 'Please pick a valid audience.' })
 }

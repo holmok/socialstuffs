@@ -96,6 +96,11 @@ export const usernameSchema = z
   .regex(/[^_]$/, 'Username cannot end with an underscore.')
   .regex(/^[^0-9]/, 'Username cannot start with a number.')
 
+// single definition shared by sign-up and settings so their uniqueness checks can't drift
+export function normalizeUsername(username: string) {
+  return username.trim().toLowerCase()
+}
+
 export const emailSchema = z
   .email({ error: 'Invalid email address' })
   .min(1, 'Email is required.')

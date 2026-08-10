@@ -86,7 +86,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     const { data } = result
 
     const normalizedEmail = normalizeEmail(data.email)
-    const normalizedUsername = data.username.toLowerCase()
+    const normalizedUsername = utils.normalizeUsername(data.username)
 
     // does user already exist?
     const existingUsers = await db

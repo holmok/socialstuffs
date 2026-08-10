@@ -8,6 +8,7 @@ import UserSettingsPage from '@pages/user/settings'
 import EditProfileForm from '@templates/components/user/edit-profile-form'
 import UserSettingsForm from '@templates/components/user/settings-form'
 import type { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
 import Uniquey from 'uniquey'
@@ -21,6 +22,8 @@ const settingsSchema = z
   .object({
     username: utils.usernameSchema,
     email: utils.emailSchema,
+    // verified against the stored hash before an email or password change is applied
+    currentPassword: z.string().optional(),
     // blank means "keep current password"; anything else gets the full sign-up strength rules
     password: z.union([z.literal(''), utils.passwordSchema]).optional(),
     confirmPassword: z.string().optional()
@@ -63,7 +66,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
   user.get('/', async (c) => {
     const dbUser = await c.var.auth.getUser()
-    if (dbUser == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+    if (dbUser == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const info = (dbUser.info ?? {}) as UserProfileInfo
     info.profileImageUrl = displayImageUrl(info, c.var.config.baseImageUrl)
     return c.render(MyProfilePage({ uid: dbUser.uid, username: dbUser.username, created: dbUser.created, info }), {
@@ -94,7 +97,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     }
 
     const user = await auth.getUser()
-    if (user == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const currentInfo = user.info as UserProfileInfo
     const currentImageUrl = displayImageUrl(currentInfo, config.baseImageUrl)
 
@@ -223,15 +226,38 @@ export default function UserRoutes(app: Hono, logger: Logger) {
       passwordHash: undefined,
       status: undefined
     }
-    if (user == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+
+    // email and password changes are account-takeover levers for a stolen session, so both
+    // require the current password; username-only changes don't
+    const changingEmail = user.email !== data.email
+    const changingPassword = Boolean(data.password)
+    if (changingEmail || changingPassword) {
+      if (!data.currentPassword) {
+        return c.html(
+          UserSettingsForm({
+            ...form,
+            errors: { currentPassword: ['Enter your current password to change your email or password.'] }
+          })
+        )
+      }
+      // getUser() deliberately omits passwordHash, so fetch it directly for verification
+      const credentials = await db.selectFrom('users').select('passwordHash').where('id', '=', user.id).executeTakeFirstOrThrow()
+      const verified = await Bun.password.verify(data.currentPassword, credentials.passwordHash)
+      if (!verified) {
+        logger.warn({ uid: user.uid }, 'Settings change rejected: current password incorrect')
+        return c.html(UserSettingsForm({ ...form, errors: { currentPassword: ['Your current password is incorrect.'] } }))
+      }
+    }
 
     const normalizedEmail = normalizeEmail(data.email)
-    if (user.email !== data.email) {
-      // check to see if the new email is already in use via the API
+    if (changingEmail) {
+      // in-use check excludes the user's own row so a case-only change of your own email is allowed
       const emailInUse = await db
         .selectFrom('users')
         .select('id')
         .where('normalizedEmail', '=', normalizedEmail)
+        .where('id', '!=', user.id)
         .executeTakeFirst()
       if (emailInUse != null) return c.html(UserSettingsForm({ ...form, errors: { email: ['Email is already in use.'] } }))
       toUpdate.email = data.email
@@ -239,13 +265,14 @@ export default function UserRoutes(app: Hono, logger: Logger) {
       changed = true
     }
 
-    const normalizedUsername = data.username?.trim().toLowerCase()
+    const normalizedUsername = utils.normalizeUsername(data.username)
     if (user.username !== data.username) {
-      // check to see if the new username is already in use via the API
+      // in-use check excludes the user's own row so a case-only change of your own username is allowed
       const usernameInUse = await db
         .selectFrom('users')
         .select('id')
         .where('normalizedUsername', '=', normalizedUsername)
+        .where('id', '!=', user.id)
         .executeTakeFirst()
       if (usernameInUse != null)
         return c.html(UserSettingsForm({ ...form, errors: { username: ['Username is already in use.'] } }))
@@ -352,7 +379,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
   user.post('/data/export', async (c) => {
     const { logger, flash, auth, db, api } = c.var
     const user = await auth.getUser()
-    if (user == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
 
     try {
       const url = await api.userData.downloadUserData(user.uid)
@@ -374,7 +401,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
   user.post('/data/delete', async (c) => {
     const { logger, flash, auth, api } = c.var
     const user = await auth.getUser()
-    if (user == null) throw new Response('Invalid user', { status: 401 }) // this should never happen due to the authorize middleware
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
 
     // the modal gates this client-side, but the word is re-checked here so a bare POST can't delete an account
     const formData = await c.req.formData()
@@ -383,6 +410,20 @@ export default function UserRoutes(app: Hono, logger: Logger) {
       .toLowerCase()
     if (confirm !== 'delete') {
       await flash.addFlash('error', 'Please type "delete" to confirm deleting your account.')
+      return utils.redirect(c, '/user/data')
+    }
+
+    // deletion is irreversible, so a live session alone isn't enough — prove the password too
+    // (getUser() deliberately omits passwordHash, so fetch it directly for verification)
+    const password = String(formData.get('password') ?? '')
+    const credentials = await c.var.db
+      .selectFrom('users')
+      .select('passwordHash')
+      .where('id', '=', user.id)
+      .executeTakeFirstOrThrow()
+    if (password === '' || !(await Bun.password.verify(password, credentials.passwordHash))) {
+      logger.warn({ uid: user.uid }, 'Account deletion rejected: password missing or incorrect')
+      await flash.addFlash('error', 'Your password is incorrect. Your account was not deleted.')
       return utils.redirect(c, '/user/data')
     }
 

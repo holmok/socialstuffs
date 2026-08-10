@@ -118,9 +118,10 @@ async function claimsFor(cookie: string): Promise<Record<string, unknown> | null
   return payload
 }
 
-// the settings form always posts all four fields; blank password means "keep current password"
+// the settings form always posts all five fields; blank password means "keep current password",
+// and currentPassword is only required when the email or password changes
 function settingsFields(user: { username: string; email: string }, overrides: Record<string, string> = {}) {
-  return { username: user.username, email: user.email, password: '', confirmPassword: '', ...overrides }
+  return { username: user.username, email: user.email, currentPassword: '', password: '', confirmPassword: '', ...overrides }
 }
 
 beforeEach(() => {
@@ -295,6 +296,56 @@ describe('POST /user/settings — username change', () => {
     const row = await db.selectFrom('users').select(['username']).where('id', '=', user.id).executeTakeFirstOrThrow()
     expect(row.username).toBe(user.username)
   })
+
+  test('a case-only change of your own username is allowed (in-use check excludes your row)', async () => {
+    const user = await seedUser('ucase')
+    const cookie = await signIn(user)
+    const newUsername = user.username.toUpperCase()
+    expect(newUsername).not.toBe(user.username)
+
+    const res = await post('/user/settings', settingsFields(user, { username: newUsername }), cookie)
+    expect(res.status).toBe(303)
+
+    const row = await db
+      .selectFrom('users')
+      .select(['username', 'normalizedUsername'])
+      .where('id', '=', user.id)
+      .executeTakeFirstOrThrow()
+    expect(row.username).toBe(newUsername)
+    expect(row.normalizedUsername).toBe(user.username.toLowerCase())
+  })
+})
+
+describe('POST /user/settings — current-password gate', () => {
+  test('an email change without the current password is rejected', async () => {
+    const user = await seedUser('gnopw')
+    const cookie = await signIn(user)
+
+    const res = await post('/user/settings', settingsFields(user, { email: `gnopw-new-${suffix}@example.com` }), cookie)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Enter your current password to change your email or password.')
+
+    const row = await db.selectFrom('users').select(['email', 'status']).where('id', '=', user.id).executeTakeFirstOrThrow()
+    expect(row.email).toBe(user.email)
+    expect(row.status).toBe('active')
+  })
+
+  test('a password change with the wrong current password is rejected', async () => {
+    const user = await seedUser('gbadpw')
+    const cookie = await signIn(user)
+    const before = await db.selectFrom('users').select(['passwordHash']).where('id', '=', user.id).executeTakeFirstOrThrow()
+
+    const res = await post(
+      '/user/settings',
+      settingsFields(user, { currentPassword: 'Wrong99#pass', password: 'NewPass88#ok', confirmPassword: 'NewPass88#ok' }),
+      cookie
+    )
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Your current password is incorrect.')
+
+    const after = await db.selectFrom('users').select(['passwordHash']).where('id', '=', user.id).executeTakeFirstOrThrow()
+    expect(after.passwordHash).toBe(before.passwordHash)
+  })
 })
 
 describe('POST /user/settings — password change', () => {
@@ -306,7 +357,7 @@ describe('POST /user/settings — password change', () => {
 
     const res = await post(
       '/user/settings',
-      settingsFields(user, { password: NEW_PASSWORD, confirmPassword: NEW_PASSWORD }),
+      settingsFields(user, { currentPassword: PASSWORD, password: NEW_PASSWORD, confirmPassword: NEW_PASSWORD }),
       cookie
     )
     expect(res.status).toBe(303)
@@ -338,7 +389,7 @@ describe('POST /user/settings — email change', () => {
     const other = await seedUser('eheld')
     const cookie = await signIn(user)
 
-    const res = await post('/user/settings', settingsFields(user, { email: other.email }), cookie)
+    const res = await post('/user/settings', settingsFields(user, { email: other.email, currentPassword: PASSWORD }), cookie)
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('Email is already in use.')
 
@@ -353,7 +404,7 @@ describe('POST /user/settings — email change', () => {
     const newEmail = `remail-new-${suffix}@example.com`
     const before = emailSpy.mock.calls.length
 
-    const res = await post('/user/settings', settingsFields(user, { email: newEmail }), cookie)
+    const res = await post('/user/settings', settingsFields(user, { email: newEmail, currentPassword: PASSWORD }), cookie)
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/sign-in')
     // the response clears the auth cookie (signed out until the new address is verified)
@@ -392,7 +443,7 @@ describe('POST /user/settings — email change', () => {
     const newEmail = `emfail-new-${suffix}@example.com`
     emailSpy.mockRejectedValueOnce(new Error('postmark down'))
 
-    const res = await post('/user/settings', settingsFields(user, { email: newEmail }), cookie)
+    const res = await post('/user/settings', settingsFields(user, { email: newEmail, currentPassword: PASSWORD }), cookie)
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/sign-in')
 
@@ -653,11 +704,22 @@ describe('POST /user/data/delete', () => {
     expect(await db.selectFrom('users').select('id').where('id', '=', user.id).executeTakeFirst()).toBeDefined()
   })
 
-  test('typing "delete" deletes the account, signs the user out, and redirects home', async () => {
+  test('a wrong password redirects back without deleting', async () => {
+    const user = await seedUser('dbadpw')
+    const cookie = await signIn(user)
+
+    const res = await post('/user/data/delete', { confirm: 'delete', password: 'Wrong99#pass' }, cookie)
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/user/data')
+    expect(deleteSpy.mock.calls.length).toBe(0)
+    expect(await db.selectFrom('users').select('id').where('id', '=', user.id).executeTakeFirst()).toBeDefined()
+  })
+
+  test('typing "delete" with the correct password deletes the account, signs the user out, and redirects home', async () => {
     const user = await seedUser('dyes')
     const cookie = await signIn(user)
 
-    const res = await post('/user/data/delete', { confirm: ' Delete ' }, cookie)
+    const res = await post('/user/data/delete', { confirm: ' Delete ', password: PASSWORD }, cookie)
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/')
     expect(deleteSpy.mock.calls).toEqual([[user.uid]])
@@ -669,7 +731,7 @@ describe('POST /user/data/delete', () => {
     const cookie = await signIn(user)
     deleteSpy.mockRejectedValueOnce(new Error('gcs down'))
 
-    const res = await post('/user/data/delete', { confirm: 'delete' }, cookie)
+    const res = await post('/user/data/delete', { confirm: 'delete', password: PASSWORD }, cookie)
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/user/data')
     // not signed out on failure

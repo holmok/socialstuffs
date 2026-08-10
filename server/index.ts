@@ -35,7 +35,10 @@ try {
   server = Bun.serve({
     port: config.server.port,
     fetch: app.fetch,
-    hostname: config.server.host
+    hostname: config.server.host,
+    // image uploads cap at 20MB and formData() buffers the whole body before that check runs,
+    // so bound the body here instead of Bun's 128MB default (20MB + multipart overhead)
+    maxRequestBodySize: 25 * 1024 * 1024
   })
 } catch (err) {
   utils.logError(logger, err, `Failed to start server on ${config.server.host}:${config.server.port}`)

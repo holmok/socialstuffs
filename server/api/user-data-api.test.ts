@@ -16,23 +16,33 @@ const db = data(config.poolConfig, config.dbSchema, logger)
 
 const suffix = Math.random().toString(36).slice(2, 10)
 
-// fake GCS bucket: records saves/deletes instead of talking to Google
-let zipExists = false
+// fake GCS bucket: records saves/deletes instead of talking to Google; getFiles honors the
+// prefix so the export listing (user_data/) and the image listing (<uid>/) stay distinct
 let savedZips: { path: string; data: Buffer }[] = []
-let bucketImages: { name: string; contents: Buffer }[] = []
+let bucketFiles: { name: string; contents: Buffer }[] = []
+let deletedFiles: string[] = []
 let deleteFilesCalls: Record<string, unknown>[] = []
 let getFilesError: Error | undefined
 
 const fakeBucket = {
   file: (path: string) => ({
-    exists: async () => [zipExists],
     save: async (buffer: Buffer) => {
       savedZips.push({ path, data: buffer })
     }
   }),
-  getFiles: async (_opts: { prefix: string }) => {
+  getFiles: async (opts: { prefix: string }) => {
     if (getFilesError) throw getFilesError
-    return [bucketImages.map((f) => ({ name: f.name, download: async () => [f.contents] }))]
+    return [
+      bucketFiles
+        .filter((f) => f.name.startsWith(opts.prefix))
+        .map((f) => ({
+          name: f.name,
+          download: async () => [f.contents],
+          delete: async () => {
+            deletedFiles.push(f.name)
+          }
+        }))
+    ]
   },
   deleteFiles: async (opts: Record<string, unknown>) => {
     deleteFilesCalls.push(opts)
@@ -93,9 +103,9 @@ async function seedComment(user: SeededUser, postId: number, content: string) {
 }
 
 beforeEach(() => {
-  zipExists = false
   savedZips = []
-  bucketImages = []
+  bucketFiles = []
+  deletedFiles = []
   deleteFilesCalls = []
   getFilesError = undefined
 })
@@ -139,17 +149,16 @@ describe('downloadUserData', () => {
       .values({ postId: post.id, postUid: post.uid, userId: user.id, userUid: user.uid, type: 'favorites' })
       .execute()
     const comment = await seedComment(user, post.id, 'my comment')
-    bucketImages = [{ name: `${user.uid}/profile-abc.jpg`, contents: Buffer.from([1, 2, 3, 4]) }]
+    bucketFiles = [{ name: `${user.uid}/profile-abc.jpg`, contents: Buffer.from([1, 2, 3, 4]) }]
 
     const url = await api.downloadUserData(user.uid)
 
-    const dateStamp = DateFns.format(new Date(), 'yyyy-MM-dd')
-    const zipPath = `user_data/dt=${dateStamp}/${user.uid}_data.zip`
-    // the full base (including the bucket path segment) is preserved even without a trailing slash
-    expect(url).toBe(`${config.baseImageUrl.replace(/\/$/, '')}/${zipPath}`)
-
     expect(savedZips.length).toBe(1)
-    expect(savedZips[0].path).toBe(zipPath)
+    const dateStamp = DateFns.format(new Date(), 'yyyy-MM-dd')
+    // the path carries a random token so export URLs are not enumerable from the public uid + date
+    expect(savedZips[0].path).toMatch(new RegExp(`^user_data/dt=${dateStamp}/[^/]{32}_${user.uid}_data\\.zip$`))
+    // the full base (including the bucket path segment) is preserved even without a trailing slash
+    expect(url).toBe(`${config.baseImageUrl.replace(/\/$/, '')}/${savedZips[0].path}`)
 
     const entries = unzipSync(new Uint8Array(savedZips[0].data))
     expect(Object.keys(entries).sort()).toEqual(['comments.ndjson', 'images/profile-abc.jpg', 'posts.ndjson', 'profile.json'])
@@ -187,11 +196,29 @@ describe('downloadUserData', () => {
 
   test('a second export on the same day is rejected', async () => {
     const user = await seedUser('dlagain')
-    zipExists = true
+    const dateStamp = DateFns.format(new Date(), 'yyyy-MM-dd')
+    bucketFiles = [{ name: `user_data/dt=${dateStamp}/sometoken_${user.uid}_data.zip`, contents: Buffer.alloc(0) }]
     const err = await api.downloadUserData(user.uid).catch((e) => e)
     expect(err).toBeInstanceOf(UserDataError)
     expect((err as UserDataError).errors.export).toEqual(['You already exported your data today. You can only do it once a day.'])
     expect(savedZips.length).toBe(0)
+  })
+
+  test('older exports — including legacy predictable paths — are deleted; other users’ are kept', async () => {
+    const user = await seedUser('dlclean')
+    bucketFiles = [
+      { name: `user_data/dt=2020-01-01/${user.uid}_data.zip`, contents: Buffer.alloc(0) },
+      { name: `user_data/dt=2020-01-02/oldtoken_${user.uid}_data.zip`, contents: Buffer.alloc(0) },
+      { name: `user_data/dt=2020-01-02/othertoken_someone-else_data.zip`, contents: Buffer.alloc(0) }
+    ]
+
+    await api.downloadUserData(user.uid)
+
+    expect(deletedFiles.sort()).toEqual([
+      `user_data/dt=2020-01-01/${user.uid}_data.zip`,
+      `user_data/dt=2020-01-02/oldtoken_${user.uid}_data.zip`
+    ])
+    expect(savedZips.length).toBe(1)
   })
 
   test('a storage failure surfaces the generic export error', async () => {
@@ -286,7 +313,7 @@ describe('deleteUserData', () => {
     // images and prior export zips are removed after the DB commit
     expect(deleteFilesCalls).toEqual([
       { prefix: `${target.uid}/`, force: true },
-      { prefix: 'user_data/', matchGlob: `user_data/dt=*/${target.uid}_data.zip`, force: true }
+      { prefix: 'user_data/', matchGlob: `user_data/dt=*/*${target.uid}_data.zip`, force: true }
     ])
   })
 

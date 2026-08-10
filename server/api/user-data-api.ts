@@ -3,8 +3,20 @@ import { Storage } from '@google-cloud/storage'
 import * as DateFns from 'date-fns'
 import { strToU8, type Zippable, zip } from 'fflate'
 import type { Logger } from 'pino'
+import Uniquey from 'uniquey'
 import type { Config } from '@/config'
 import { logError } from '@/utils'
+
+// the bucket is public-read, so export URLs are capability URLs: the random token is the
+// only thing keeping another user's archive undownloadable. Never build the path from
+// public identifiers alone (the old uid+date scheme was enumerable).
+const exportUniquey = new Uniquey({ length: 32 })
+
+// matches this user's export objects in both the current tokened format
+// (dt=.../<token>_<uid>_data.zip) and the legacy predictable format (dt=.../<uid>_data.zip)
+function isExportFor(name: string, userUid: string) {
+  return name.endsWith(`_${userUid}_data.zip`) || name.endsWith(`/${userUid}_data.zip`)
+}
 
 export class UserDataError extends Error {
   constructor(
@@ -48,14 +60,19 @@ export default class UserDataAPI {
       if (user == null) throw new UserDataError('User not found', { user: ['User not found'] })
 
       const dateStamp = DateFns.format(new Date(), 'yyyy-MM-dd')
-      const zipPath = `user_data/dt=${dateStamp}/${userUid}_data.zip`
+      const zipPath = `user_data/dt=${dateStamp}/${exportUniquey.create()}_${userUid}_data.zip`
       const bucket = this.storage.bucket(this.imageBucket)
       const zipFile = bucket.file(zipPath)
-      const [alreadyExported] = await zipFile.exists()
-      if (alreadyExported) {
+
+      // one listing serves the once-a-day check and the cleanup of older exports (including
+      // any lingering legacy predictable-path zips, which are publicly enumerable)
+      const [exportFiles] = await bucket.getFiles({ prefix: 'user_data/' })
+      const previousExports = exportFiles.filter((file) => isExportFor(file.name, userUid))
+      if (previousExports.some((file) => file.name.startsWith(`user_data/dt=${dateStamp}/`))) {
         const message = 'You already exported your data today. You can only do it once a day.'
         throw new UserDataError(message, { export: [message] })
       }
+      await Promise.all(previousExports.map((file) => file.delete()))
 
       const posts = await this.db
         .selectFrom('posts')
@@ -179,7 +196,8 @@ export default class UserDataAPI {
       // uploaded images plus any data-export zips (they contain everything above)
       const bucket = this.storage.bucket(this.imageBucket)
       await bucket.deleteFiles({ prefix: `${userUid}/`, force: true })
-      await bucket.deleteFiles({ prefix: 'user_data/', matchGlob: `user_data/dt=*/${userUid}_data.zip`, force: true })
+      // `*` may be empty, so this matches both the tokened and legacy export filenames
+      await bucket.deleteFiles({ prefix: 'user_data/', matchGlob: `user_data/dt=*/*${userUid}_data.zip`, force: true })
       this.logger.info({ userUid }, 'User data deleted')
     } catch (error) {
       if (error instanceof UserDataError) throw error

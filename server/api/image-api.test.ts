@@ -97,6 +97,29 @@ describe('uploadImage', () => {
     expect(getFilesArgs.length).toBe(0)
   })
 
+  test('a PNG whose header declares oversized dimensions is rejected before decoding', async () => {
+    // PNG signature + IHDR declaring 20000×20000 — intentionally not a decodable file, because
+    // the rejection must come from the header probe alone, before Jimp allocates the bitmap
+    const bomb = Buffer.alloc(32)
+    bomb.writeUInt32BE(0x89504e47, 0)
+    bomb.writeUInt32BE(20000, 16)
+    bomb.writeUInt32BE(20000, 20)
+
+    const err = await api.uploadImage(options({ buffer: bomb })).catch((e) => e)
+    expect(err).toBeInstanceOf(ImageUploadError)
+    expect((err as ImageUploadError).errors.image?.[0]).toContain('dimensions are too large')
+    expect(saved.length).toBe(0)
+  })
+
+  test('a JPEG whose start-of-frame declares oversized dimensions is rejected before decoding', async () => {
+    // SOI + SOF0 segment declaring 100×9000
+    const bomb = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x64, 0x23, 0x28, 0x00, 0x00, 0x00])
+    const err = await api.uploadImage(options({ buffer: bomb })).catch((e) => e)
+    expect(err).toBeInstanceOf(ImageUploadError)
+    expect((err as ImageUploadError).errors.image?.[0]).toContain('dimensions are too large')
+    expect(saved.length).toBe(0)
+  })
+
   test('POSSIBLE likelihoods are acceptable and do not block the upload', async () => {
     mockVision({ adult: 'POSSIBLE', violence: 'POSSIBLE', racy: 'POSSIBLE' })
     await api.uploadImage(options())
