@@ -5,7 +5,7 @@ type EditPostPageProps = { uid: string } & Omit<PostFormProps, 'action' | 'submi
 const EditPostPage = ({ uid, ...form }: EditPostPageProps) => {
   return (
     <div>
-      <h1>Edit Post</h1>
+      <h1 className="form-heading">Edit Post</h1>
       <PostForm {...form} action={`/posts/${uid}/edit`} submitLabel="Save Post" showDelete />
       {/* outside the form so HTMX error re-renders (which swap the form) never duplicate it */}
       <dialog id="post-delete-modal" className="delete-modal" aria-labelledby="post-delete-title">
