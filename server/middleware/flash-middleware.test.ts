@@ -47,12 +47,28 @@ app.get('/add-redirect', async (c) => {
   await c.var.flash.addFlash('info', `redir-${suffix}`)
   return c.redirect('/get', 303)
 })
+app.get('/rotate-then-add', async (c) => {
+  const oldId = c.var.session.sessionId
+  await c.var.session.rotate()
+  await c.var.flash.addFlash('success', `post-rotate-${suffix}`)
+  return c.json({ oldId, newId: c.var.session.sessionId })
+})
+
+const markerName = `${config.auth.sessionCookieName}_f`
 
 function sessionCookie(res: Response): string {
   const set = res.headers.getSetCookie()
   const target = set.find((s) => s.startsWith(`${config.auth.sessionCookieName}=`))
   if (!target) throw new Error('no session cookie set')
   return target.split(';')[0]
+}
+
+// what a browser would send back: every Set-Cookie's name=value pair joined into one header
+function cookiesOf(res: Response): string {
+  return res.headers
+    .getSetCookie()
+    .map((s) => s.split(';')[0])
+    .join('; ')
 }
 
 // signed cookie value is `${sessionId}.${signature}`; session ids are alphanumeric (no dots)
@@ -73,16 +89,52 @@ describe('flash getFlashes (atomic pop)', () => {
     const addRes = await app.request('/add')
     const { sessionId } = (await addRes.json()) as { sessionId: string }
     sessionIds.add(sessionId)
-    const cookie = sessionCookie(addRes)
+    // addFlash sets the marker cookie alongside the session cookie
+    expect(addRes.headers.getSetCookie().some((s) => s.startsWith(`${markerName}=1`))).toBe(true)
+    const cookie = cookiesOf(addRes)
 
     const firstRes = await app.request('/get', { headers: { cookie } })
     const first = (await firstRes.json()) as { flashes: { success: string[] }; isNew: boolean }
     expect(first.isNew).toBe(false)
     expect(first.flashes.success).toEqual([`hello-${suffix}`])
+    // popping clears the marker so the next render takes the fast path
+    const markerClear = firstRes.headers.getSetCookie().find((s) => s.startsWith(`${markerName}=`))
+    expect(markerClear).toContain('Max-Age=0')
 
-    const secondRes = await app.request('/get', { headers: { cookie } })
+    // a browser that honored the clear sends only the session cookie back
+    const secondRes = await app.request('/get', { headers: { cookie: sessionCookie(addRes) } })
     const second = (await secondRes.json()) as { flashes: { success: string[]; error: string[]; info: string[] } }
     expect(second.flashes).toEqual({ success: [], error: [], info: [] })
+  })
+
+  test('no marker cookie: getFlashes skips the kv query entirely (a seeded flash row survives)', async () => {
+    const mintRes = await app.request('/get')
+    const { sessionId } = (await mintRes.json()) as { sessionId: string }
+    sessionIds.add(sessionId)
+    const cookie = sessionCookie(mintRes)
+
+    // a flash row exists but the client carries no marker — the fast path must not delete it
+    const rowKey = `${sessionId}:flash`
+    await db
+      .insertInto('kvStorage')
+      .values({
+        key: rowKey,
+        value: JSON.stringify({ success: [`hidden-${suffix}`], error: [], info: [] }),
+        expires: new Date(Date.now() + 60_000)
+      })
+      .execute()
+
+    const res = await app.request('/get', { headers: { cookie } })
+    const body = (await res.json()) as { flashes: { success: string[] } }
+    expect(body.flashes.success).toEqual([])
+    const row = await db.selectFrom('kvStorage').where('key', '=', rowKey).select('key').executeTakeFirst()
+    expect(row).toBeDefined()
+
+    // with the marker present the same row pops
+    const popRes = await app.request('/get', { headers: { cookie: `${cookie}; ${markerName}=1` } })
+    const popped = (await popRes.json()) as { flashes: { success: string[] } }
+    expect(popped.flashes.success).toEqual([`hidden-${suffix}`])
+    expect(await db.selectFrom('kvStorage').where('key', '=', rowKey).select('key').executeTakeFirst()).toBeUndefined()
   })
 
   test('get on a request with no session cookie returns empty via the fast path (no kv row)', async () => {
@@ -154,8 +206,8 @@ describe('flash redirect race', () => {
     const res1 = await app.request('/add-redirect')
     expect(res1.status).toBe(303)
     expect(res1.headers.get('location')).toBe('/get')
-    const cookie = sessionCookie(res1)
-    sessionIds.add(sessionIdFromCookie(cookie))
+    const cookie = cookiesOf(res1)
+    sessionIds.add(sessionIdFromCookie(sessionCookie(res1)))
 
     const res2 = await app.request('/get', { headers: { cookie } })
     const second = (await res2.json()) as { flashes: { info: string[] }; isNew: boolean }
@@ -190,9 +242,33 @@ describe('first-visit parallel requests', () => {
     const added = (await addRes.json()) as { sessionId: string }
     expect(added.sessionId).toBe(bodyA.sessionId)
 
-    const getRes = await app.request('/get', { headers: { cookie: cookieA } })
+    const getRes = await app.request('/get', { headers: { cookie: `${cookieA}; ${cookiesOf(addRes)}` } })
     const got = (await getRes.json()) as { flashes: { success: string[] }; isNew: boolean }
     expect(got.isNew).toBe(false)
     expect(got.flashes.success).toEqual([`hello-${suffix}`])
+  })
+})
+
+describe('session rotation interplay', () => {
+  test('the marker survives rotation: a flash written after rotate() pops, pre-rotation flashes do not leak', async () => {
+    // old session accumulates a flash (and the marker)
+    const res1 = await app.request('/add')
+    const { sessionId: oldId } = (await res1.json()) as { sessionId: string }
+    sessionIds.add(oldId)
+
+    // sign-in shape: rotate first, then flash — the pre-rotation flash must die with the old session
+    const res2 = await app.request('/rotate-then-add', { headers: { cookie: cookiesOf(res1) } })
+    const body2 = (await res2.json()) as { oldId: string; newId: string }
+    expect(body2.oldId).toBe(oldId)
+    expect(body2.newId).not.toBe(oldId)
+    sessionIds.add(body2.newId)
+    const oldRows = await db.selectFrom('kvStorage').where('key', 'like', `${oldId}:%`).select('key').execute()
+    expect(oldRows).toHaveLength(0)
+
+    // next request carries the rotated session cookie plus the still-set marker
+    const res3 = await app.request('/get', { headers: { cookie: cookiesOf(res2) } })
+    const body3 = (await res3.json()) as { flashes: { success: string[]; info: string[] }; sessionId: string }
+    expect(body3.sessionId).toBe(body2.newId)
+    expect(body3.flashes.success).toEqual([`post-rotate-${suffix}`])
   })
 })
