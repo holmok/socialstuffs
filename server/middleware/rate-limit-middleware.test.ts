@@ -100,4 +100,18 @@ describe('rateLimit overflow (MAX_TRACKED_KEYS)', () => {
     // and the block still stands afterwards
     expect((await signIn('203.0.113.20')).status).toBe(429)
   })
+
+  test('a map wedged at the cap with expired junk is swept, so new keys are still tracked and blockable', async () => {
+    // prime the once-a-minute sweep so it can't clear the filler for us — this forces the at-cap sweep path
+    expect((await signIn('203.0.113.30')).status).toBe(200)
+
+    // flood past the cap with already-expired keys
+    __fillRateLimitKeys(10_001, -1000)
+
+    // the new key triggers the at-cap sweep and gets tracked (if it passed untracked, it could never 429)
+    for (let i = 0; i < 10; i++) {
+      expect((await signIn('203.0.113.31')).status).toBe(200)
+    }
+    expect((await signIn('203.0.113.31')).status).toBe(429)
+  })
 })

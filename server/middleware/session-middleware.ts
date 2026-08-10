@@ -9,6 +9,7 @@ export type SessionContext = {
   popSessionValue: <T>(key: string) => Promise<T | undefined>
   setSessionValue: <T>(key: string, value: T) => Promise<void>
   removeSessionValue: (key: string) => Promise<void>
+  rotate: () => Promise<void>
 }
 
 const uniquey = new Uniquey({ length: 32 })
@@ -16,16 +17,18 @@ const uniquey = new Uniquey({ length: 32 })
 export function session(): MiddlewareHandler {
   return async (c, next) => {
     const { db, config } = c.var
+    const setSessionCookie = (id: string) =>
+      cookie.setSignedCookie(c, config.auth.sessionCookieName, id, config.auth.cookieSecret, {
+        httpOnly: true,
+        sameSite: 'strict',
+        secure: config.mode.isProd
+      })
     let sessionId = await cookie.getSignedCookie(c, config.auth.cookieSecret, config.auth.sessionCookieName)
     let isNew = false
     if (!sessionId) {
       isNew = true
       sessionId = uniquey.create()
-      await cookie.setSignedCookie(c, config.auth.sessionCookieName, sessionId, config.auth.cookieSecret, {
-        httpOnly: true,
-        sameSite: 'strict',
-        secure: config.mode.isProd
-      })
+      await setSessionCookie(sessionId)
     }
     const session: SessionContext = {
       sessionId,
@@ -72,6 +75,20 @@ export function session(): MiddlewareHandler {
       async removeSessionValue(key: string) {
         const kvKey = `${sessionId}:${key}`
         await db.deleteFrom('kvStorage').where('key', '=', kvKey).execute()
+      },
+      async rotate() {
+        // regenerate the session across an auth boundary (sign-in/sign-out) so a pre-auth session id
+        // never carries over (session fixation). Drops the old session's kv rows, mints a fresh id,
+        // and re-points the cookie — later get/set/pop calls use the new id, so write flashes AFTER
+        // rotating or they die with the old session. Minted ids are alphanumeric, but the signed-cookie
+        // HMAC covers only the value — a client can replay another cookie signed with the same secret
+        // (e.g. the auth JWT, whose base64url alphabet includes `_`) as the session cookie, so escape
+        // LIKE metacharacters rather than trusting the id's shape.
+        const escaped = session.sessionId.replace(/[\\%_]/g, (ch: string) => `\\${ch}`)
+        await db.deleteFrom('kvStorage').where('key', 'like', `${escaped}:%`).execute()
+        sessionId = uniquey.create()
+        session.sessionId = sessionId
+        await setSessionCookie(sessionId)
       }
     }
     c.set('session', session)

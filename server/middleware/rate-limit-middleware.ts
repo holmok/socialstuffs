@@ -17,9 +17,23 @@ const MAX_TRACKED_KEYS = 10_000
 
 const windows = new Map<string, RateWindow>()
 
+// eviction is lazy: the requested key is checked on access, and a full O(n) sweep runs at most
+// once per SWEEP_INTERVAL_MS — plus on demand when the map hits MAX_TRACKED_KEYS, so expired
+// junk can't wedge the cap — instead of scanning the whole map on every rate-limited request
+const SWEEP_INTERVAL_MS = 60_000
+let lastSweep = 0
+
+function sweepExpired(now: number) {
+  for (const [key, window] of windows) {
+    if (window.expires <= now) windows.delete(key)
+  }
+  lastSweep = now
+}
+
 // test-only: clears all rate-limit state (the map is module-level, shared across createApp() instances in one process)
 export function __resetRateLimits() {
   windows.clear()
+  lastSweep = 0
 }
 
 // test-only: fills the map with unexpired filler keys to exercise the MAX_TRACKED_KEYS overflow path
@@ -50,12 +64,17 @@ function clientIp(c: Context): string {
 export function rateLimit({ windowMs, max, keyPrefix, onLimit }: RateLimitOptions): MiddlewareHandler {
   return async (c, next) => {
     const now = Date.now()
-    for (const [key, window] of windows) {
-      if (window.expires <= now) windows.delete(key)
-    }
+    if (now - lastSweep >= SWEEP_INTERVAL_MS) sweepExpired(now)
     const key = `${keyPrefix}:${clientIp(c)}`
-    const window = windows.get(key)
+    let window = windows.get(key)
+    if (window && window.expires <= now) {
+      // lazy per-key eviction: an expired window starts fresh without waiting for a sweep
+      windows.delete(key)
+      window = undefined
+    }
     if (!window) {
+      // at capacity: sweep first so a map full of expired junk can't wedge the cap
+      if (windows.size >= MAX_TRACKED_KEYS) sweepExpired(now)
       // at capacity even after the sweep (a key-flood): let new keys pass untracked rather than
       // wiping the map — clearing would reset every window, including ones actively blocking an attacker
       if (windows.size >= MAX_TRACKED_KEYS) return next()
