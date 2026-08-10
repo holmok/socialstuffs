@@ -5,7 +5,7 @@ interface AccountValidationFailurePageProps {
 const AccountValidationFailurePage = ({ message }: AccountValidationFailurePageProps) => {
   return (
     <>
-      <h1>Invalid account validation link.</h1>
+      <h1 className="form-heading">Invalid account validation link.</h1>
       {message && <p>{message}</p>}
       <p>
         Need a new link? <a href="/resend-validation">Resend your validation email</a>.
