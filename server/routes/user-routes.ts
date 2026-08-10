@@ -1,4 +1,3 @@
-import { ImageUploadError } from '@api/image-api'
 import { UserDataError } from '@api/user-data-api'
 import type { UserProfileInfo, UserStatus } from '@data/user-data'
 import UserDataPage from '@pages/user/data'
@@ -15,6 +14,7 @@ import Uniquey from 'uniquey'
 import { z } from 'zod'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
+import { moderateFields, validateAndUploadImage } from './form-helpers'
 
 const tokenUniquey = new Uniquey({ length: 32 })
 
@@ -46,19 +46,6 @@ type ProfileData = z.infer<typeof profileSchema>
 
 const profileTextFields = ['fullname', 'title', 'location', 'bio'] as const
 
-// each upload gets a fresh filename (old ones are removed via removePrefix) so cached URLs never go stale
-const imageUniquey = new Uniquey({ length: 8 })
-
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024
-// formats Jimp can decode; keep in sync with the accept attribute and hint in the edit-profile form
-const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif']
-
-// users without an uploaded photo get the shared placeholder image from the bucket
-function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
-  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
-  return info.profileImageUrl ?? new URL('profile.jpg', base).href
-}
-
 export default function UserRoutes(app: Hono, logger: Logger) {
   logger.info('Registering user routes')
   const user = app.basePath('/user')
@@ -68,7 +55,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     const dbUser = await c.var.auth.getUser()
     if (dbUser == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const info = (dbUser.info ?? {}) as UserProfileInfo
-    info.profileImageUrl = displayImageUrl(info, c.var.config.baseImageUrl)
+    info.profileImageUrl = utils.displayImageUrl(info, c.var.config.baseImageUrl)
     return c.render(MyProfilePage({ uid: dbUser.uid, username: dbUser.username, created: dbUser.created, info }), {
       title: 'My Profile',
       description: 'This is my profile page.',
@@ -79,7 +66,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
   user.get('/edit-profile', async (c) => {
     const dbUser = await c.var.auth.getUser()
     const info = (dbUser?.info ?? {}) as UserProfileInfo
-    info.profileImageUrl = displayImageUrl(info, c.var.config.baseImageUrl)
+    info.profileImageUrl = utils.displayImageUrl(info, c.var.config.baseImageUrl)
     return c.render(EditProfilePage({ info }), {
       title: 'Edit Profile',
       description: 'This is the edit profile page.',
@@ -99,78 +86,42 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     const user = await auth.getUser()
     if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const currentInfo = user.info as UserProfileInfo
-    const currentImageUrl = displayImageUrl(currentInfo, config.baseImageUrl)
+    const currentImageUrl = utils.displayImageUrl(currentInfo, config.baseImageUrl)
+
+    // browsers can't restore a picked file into a re-rendered form, so failures unrelated to the
+    // image carry a visible "re-select your photo" note. HTMX failures re-render the form fragment;
+    // no-JS failures re-render the full page (mirrors GET /user/edit-profile)
+    const image = formData.get('image')
+    const hadImage = image instanceof File && image.size > 0
+    const rerender = (values: ProfileData, errors: Record<string, string[]>) => {
+      const imageDroppedNote = hadImage && !errors.image
+      return utils.formErrorResponse(
+        c,
+        EditProfileForm({ ...values, profileImageUrl: currentImageUrl, errors, imageDroppedNote }),
+        EditProfilePage({ info: { ...values, profileImageUrl: currentImageUrl }, errors, imageDroppedNote }),
+        { title: 'Edit Profile', description: 'This is the edit profile page.', styles: ['user', 'auth'] }
+      )
+    }
 
     const result = utils.validateFormData<ProfileData>(form, profileSchema)
     if (!result.success) {
       logger.warn({ errors: result.errors }, 'Validation errors on edit profile form')
-      return c.html(EditProfileForm({ ...form, profileImageUrl: currentImageUrl, errors: result.errors }))
+      return rerender(form, result.errors)
     }
     const { data } = result
 
-    // moderate every non-empty text field; a flagged field blocks the save with an error on that field.
-    // a moderation outage fails closed (form-level error) rather than letting unchecked text through
-    try {
-      const flagged = await Promise.all(
-        profileTextFields
-          .filter((field) => data[field])
-          .map(async (field) => [field, await api.language.getContentFlags(data[field] as string)] as const)
-      )
-      const errors: Record<string, string[]> = {}
-      for (const [field, flags] of flagged) {
-        if (flags.length > 0) errors[field] = ['This text appears to contain inappropriate content.']
-      }
-      if (Object.keys(errors).length > 0) {
-        logger.warn({ uid: user.uid, fields: Object.keys(errors) }, 'Profile text flagged by moderation')
-        return c.html(EditProfileForm({ ...data, profileImageUrl: currentImageUrl, errors }))
-      }
-    } catch (error) {
-      utils.logError(logger, error, 'Error moderating profile text')
-      return c.html(
-        EditProfileForm({
-          ...data,
-          profileImageUrl: currentImageUrl,
-          errors: { form: ["We couldn't check your text right now. Please try again."] }
-        })
-      )
-    }
+    const moderationErrors = await moderateFields(api, logger, data, profileTextFields)
+    if (moderationErrors) return rerender(data, moderationErrors)
 
-    const image = formData.get('image')
-    let profileImageUrl: string | undefined
-    if (image instanceof File && image.size > 0) {
-      if (image.size > MAX_IMAGE_BYTES) {
-        return c.html(
-          EditProfileForm({
-            ...data,
-            profileImageUrl: currentImageUrl,
-            errors: { image: ['Image is too large. The maximum size is 20MB.'] }
-          })
-        )
-      }
-      if (!allowedImageTypes.includes(image.type)) {
-        return c.html(
-          EditProfileForm({
-            ...data,
-            profileImageUrl: currentImageUrl,
-            errors: { image: ['Image must be a JPEG, PNG, or GIF.'] }
-          })
-        )
-      }
-      try {
-        profileImageUrl = await api.images.uploadImage({
-          userUid: user.uid,
-          buffer: Buffer.from(await image.arrayBuffer()),
-          filename: `profile-${imageUniquey.create()}`,
-          mimetype: 'image/jpeg',
-          maxDimension: 512,
-          removePrefix: 'profile'
-        })
-      } catch (error) {
-        const errors =
-          error instanceof ImageUploadError ? error.errors : { image: ["We couldn't upload your image. Please try again."] }
-        return c.html(EditProfileForm({ ...data, profileImageUrl: currentImageUrl, errors }))
-      }
-    }
+    const upload = await validateAndUploadImage(c, formData, {
+      userUid: user.uid,
+      filenamePrefix: 'profile',
+      maxDimension: 512,
+      // old profile photos are removed so cached URLs never go stale
+      removePrefix: 'profile'
+    })
+    if ('errors' in upload) return rerender(data, upload.errors)
+    const profileImageUrl = upload.url
 
     const info: UserProfileInfo = {
       ...currentInfo,
@@ -200,11 +151,20 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     const { logger, flash, auth, db, api, config } = c.var
     const formData = await c.req.formData()
     const form = Object.fromEntries(formData.entries()) as Record<string, string>
+    // HTMX failures re-render the form fragment; no-JS failures re-render the full page (mirrors
+    // GET /user/settings). Only username/email are echoed back — passwords never are
+    const rerender = (errors: Record<string, string[]>) =>
+      utils.formErrorResponse(
+        c,
+        UserSettingsForm({ username: form.username, email: form.email, errors }),
+        UserSettingsPage({ username: form.username, email: form.email, errors }),
+        { title: 'Settings', description: 'This is the settings page.', styles: ['user', 'auth'] }
+      )
     const result = utils.validateFormData<SettingsData>(form, settingsSchema)
 
     if (!result.success) {
       logger.warn({ errors: result.errors }, 'Validation errors on settings form')
-      return c.html(UserSettingsForm({ ...form, errors: result.errors }))
+      return rerender(result.errors)
     }
 
     const { data } = result
@@ -234,19 +194,14 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     const changingPassword = Boolean(data.password)
     if (changingEmail || changingPassword) {
       if (!data.currentPassword) {
-        return c.html(
-          UserSettingsForm({
-            ...form,
-            errors: { currentPassword: ['Enter your current password to change your email or password.'] }
-          })
-        )
+        return rerender({ currentPassword: ['Enter your current password to change your email or password.'] })
       }
       // getUser() deliberately omits passwordHash, so fetch it directly for verification
       const credentials = await db.selectFrom('users').select('passwordHash').where('id', '=', user.id).executeTakeFirstOrThrow()
       const verified = await Bun.password.verify(data.currentPassword, credentials.passwordHash)
       if (!verified) {
         logger.warn({ uid: user.uid }, 'Settings change rejected: current password incorrect')
-        return c.html(UserSettingsForm({ ...form, errors: { currentPassword: ['Your current password is incorrect.'] } }))
+        return rerender({ currentPassword: ['Your current password is incorrect.'] })
       }
     }
 
@@ -259,7 +214,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
         .where('normalizedEmail', '=', normalizedEmail)
         .where('id', '!=', user.id)
         .executeTakeFirst()
-      if (emailInUse != null) return c.html(UserSettingsForm({ ...form, errors: { email: ['Email is already in use.'] } }))
+      if (emailInUse != null) return rerender({ email: ['Email is already in use.'] })
       toUpdate.email = data.email
       toUpdate.normalizedEmail = normalizedEmail
       changed = true
@@ -274,8 +229,7 @@ export default function UserRoutes(app: Hono, logger: Logger) {
         .where('normalizedUsername', '=', normalizedUsername)
         .where('id', '!=', user.id)
         .executeTakeFirst()
-      if (usernameInUse != null)
-        return c.html(UserSettingsForm({ ...form, errors: { username: ['Username is already in use.'] } }))
+      if (usernameInUse != null) return rerender({ username: ['Username is already in use.'] })
       toUpdate.username = data.username
       toUpdate.normalizedUsername = normalizedUsername
       changed = true

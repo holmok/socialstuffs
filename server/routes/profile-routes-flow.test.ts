@@ -143,7 +143,7 @@ describe('auth gating on /profile', () => {
   test('unauthenticated GET redirects to /sign-in', async () => {
     const res = await get('/profile/some-uid')
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/sign-in')
+    expect(res.headers.get('location')).toBe('/sign-in?next=%2Fprofile%2Fsome-uid')
   })
 })
 

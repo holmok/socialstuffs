@@ -152,13 +152,13 @@ describe('auth gating on /user', () => {
   test('unauthenticated GET redirects to /sign-in', async () => {
     const res = await get('/user/settings')
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/sign-in')
+    expect(res.headers.get('location')).toBe('/sign-in?next=%2Fuser%2Fsettings')
   })
 
   test('unauthenticated HTMX GET gets a 401 with HX-Redirect', async () => {
     const res = await get('/user', undefined, { 'HX-Request': 'true' })
     expect(res.status).toBe(401)
-    expect(res.headers.get('HX-Redirect')).toBe('/sign-in')
+    expect(res.headers.get('HX-Redirect')).toBe('/sign-in?next=%2Fuser')
   })
 
   test('unauthenticated POST /user/settings redirects to /sign-in', async () => {
@@ -373,7 +373,7 @@ describe('POST /user/settings — password change', () => {
     expect((await get('/user/settings', newCookie)).status).toBe(200)
     const stale = await get('/user/settings', cookie)
     expect(stale.status).toBe(302)
-    expect(stale.headers.get('location')).toBe('/sign-in')
+    expect(stale.headers.get('location')).toBe('/sign-in?next=%2Fuser%2Fsettings')
 
     // old password no longer signs in, new one does
     const oldPw = await post('/sign-in', { email: user.email, password: PASSWORD })
@@ -434,7 +434,7 @@ describe('POST /user/settings — email change', () => {
     // the old session no longer grants access (account is pending)
     const stale = await get('/user/settings', cookie)
     expect(stale.status).toBe(302)
-    expect(stale.headers.get('location')).toBe('/sign-in')
+    expect(stale.headers.get('location')).toBe('/sign-in?next=%2Fuser%2Fsettings')
   })
 
   test('a validation-email send failure is non-fatal: account is still pending with a token', async () => {

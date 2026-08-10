@@ -1,6 +1,5 @@
-import { ImageUploadError } from '@api/image-api'
 import CommentForm from '@components/post/comment-form'
-import PostForm, { createStatusOptions, editStatusOptions, type StatusOption } from '@components/post/post-form'
+import PostForm, { createStatusOptions, editStatusOptions } from '@components/post/post-form'
 import type { UserProfileInfo } from '@data/user-data'
 import EditPostPage from '@pages/post/edit'
 import NewPostPage from '@pages/post/new'
@@ -12,15 +11,11 @@ import Uniquey from 'uniquey'
 import { z } from 'zod'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
+import { moderateFields, validateAndUploadImage } from './form-helpers'
 
 const uidUniquey = new Uniquey() // short by design: public uid, not a secret
-// each upload gets a fresh filename so cached URLs never go stale
-const imageUniquey = new Uniquey({ length: 8 })
 
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024
 const COMMENT_LIMIT = 30
-// formats Jimp can decode; keep in sync with the accept attribute and hint in the post form
-const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif']
 
 const sharedPostFields = {
   content: z.string().trim().min(1, 'Post text is required.').max(500, 'Post text must be at most 500 characters long.'),
@@ -53,16 +48,21 @@ type CommentFormData = z.infer<typeof commentSchema>
 const postTextFields = ['content', 'linkText'] as const
 const postFormFields = ['content', 'linkUrl', 'linkText', 'status', 'audience'] as const
 
-// how the shared form is addressed and labeled when it re-renders with errors
-type FormChrome = { action: string; submitLabel: string; statusOptions: StatusOption[]; imageUrl?: string; showDelete?: boolean }
+// typed field values fed back into the form components on an error re-render
+type PostFormValues = Partial<Record<(typeof postFormFields)[number], string>>
+type PostFormRerender = (
+  values: PostFormValues,
+  errors: Record<string, string[]>,
+  imageDroppedNote: boolean
+) => Response | Promise<Response>
 
-// shared parse → validate → moderate → upload pipeline for create and edit.
+// shared parse → validate → moderate → upload pipeline for create and edit (see form-helpers.ts).
 // returns the re-rendered form response on any failure, or the validated fields plus any freshly uploaded image URL
 async function processPostForm(
   c: Context,
   userUid: string,
   schema: z.ZodType<PostFormData>,
-  chrome: FormChrome
+  rerender: PostFormRerender
 ): Promise<{ response: Response } | { data: PostFormData; uploadedImageUrl: string | undefined }> {
   const { logger, api } = c.var
   const formData = await c.req.formData()
@@ -71,69 +71,28 @@ async function processPostForm(
     const value = formData.get(field)
     if (typeof value === 'string') form[field] = value
   }
-  const rerender = async (values: Record<string, string | undefined>, errors: Record<string, string[]>) => ({
-    response: await c.html(PostForm({ ...values, ...chrome, errors }))
+  // browsers can't restore a picked file into a re-rendered form, so failures unrelated to the
+  // image carry a visible "re-select your photo" note
+  const image = formData.get('image')
+  const hadImage = image instanceof File && image.size > 0
+  const fail = async (values: PostFormValues, errors: Record<string, string[]>) => ({
+    response: await rerender(values, errors, hadImage && !errors.image)
   })
 
   const result = utils.validateFormData<PostFormData>(form, schema)
   if (!result.success) {
     logger.warn({ errors: result.errors }, 'Validation errors on post form')
-    return rerender(form, result.errors)
+    return fail(form, result.errors)
   }
   const { data } = result
 
-  // moderate every non-empty text field; a flagged field blocks the save with an error on that field.
-  // a moderation outage fails closed (form-level error) rather than letting unchecked text through
-  try {
-    const flagged = await Promise.all(
-      postTextFields
-        .filter((field) => data[field])
-        .map(async (field) => [field, await api.language.getContentFlags(data[field] as string)] as const)
-    )
-    const errors: Record<string, string[]> = {}
-    for (const [field, flags] of flagged) {
-      if (flags.length > 0) errors[field] = ['This text appears to contain inappropriate content.']
-    }
-    if (Object.keys(errors).length > 0) {
-      logger.warn({ uid: userUid, fields: Object.keys(errors) }, 'Post text flagged by moderation')
-      return rerender(data, errors)
-    }
-  } catch (error) {
-    utils.logError(logger, error, 'Error moderating post text')
-    return rerender(data, { form: ["We couldn't check your text right now. Please try again."] })
-  }
+  const moderationErrors = await moderateFields(api, logger, data, postTextFields)
+  if (moderationErrors) return fail(data, moderationErrors)
 
-  const image = formData.get('image')
-  let uploadedImageUrl: string | undefined
-  if (image instanceof File && image.size > 0) {
-    if (image.size > MAX_IMAGE_BYTES) {
-      return rerender(data, { image: ['Image is too large. The maximum size is 20MB.'] })
-    }
-    if (!allowedImageTypes.includes(image.type)) {
-      return rerender(data, { image: ['Image must be a JPEG, PNG, or GIF.'] })
-    }
-    try {
-      uploadedImageUrl = await api.images.uploadImage({
-        userUid,
-        buffer: Buffer.from(await image.arrayBuffer()),
-        filename: `post-${imageUniquey.create()}`,
-        mimetype: 'image/jpeg',
-        maxDimension: 1280
-      })
-    } catch (error) {
-      const errors =
-        error instanceof ImageUploadError ? error.errors : { image: ["We couldn't upload your image. Please try again."] }
-      return rerender(data, errors)
-    }
-  }
+  const upload = await validateAndUploadImage(c, formData, { userUid, filenamePrefix: 'post', maxDimension: 1280 })
+  if ('errors' in upload) return fail(data, upload.errors)
 
-  return { data, uploadedImageUrl }
-}
-
-// users without an uploaded photo get the shared placeholder image from the bucket (mirrors profile-routes)
-function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
-  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
-  return info.profileImageUrl ?? new URL('profile.jpg', base).href
+  return { data, uploadedImageUrl: upload.url }
 }
 
 // a post you can view: published, by an active author, and the viewer is the author or in the
@@ -200,11 +159,22 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     const user = await auth.getUser()
     if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
 
-    const result = await processPostForm(c, user.uid, createPostSchema, {
-      action: '/posts/new',
-      submitLabel: 'Create Post',
-      statusOptions: createStatusOptions
-    })
+    // HTMX failures re-render the form fragment; no-JS failures re-render the full page (mirrors GET /posts/new)
+    const rerender: PostFormRerender = (values, errors, imageDroppedNote) =>
+      utils.formErrorResponse(
+        c,
+        PostForm({
+          ...values,
+          action: '/posts/new',
+          submitLabel: 'Create Post',
+          statusOptions: createStatusOptions,
+          errors,
+          imageDroppedNote
+        }),
+        NewPostPage({ ...values, errors, imageDroppedNote }),
+        { title: 'New Post', description: 'Create a new post.', styles: ['auth'] }
+      )
+    const result = await processPostForm(c, user.uid, createPostSchema, rerender)
     if ('response' in result) return result.response
     const { data, uploadedImageUrl } = result
 
@@ -268,14 +238,33 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
     const post = await loadOwnPost(c, user.uid)
 
-    const result = await processPostForm(c, user.uid, editPostSchema, {
-      action: `/posts/${post.uid}/edit`,
-      submitLabel: 'Save Post',
-      statusOptions: editStatusOptions(post.status),
-      imageUrl: post.imageUrl ?? undefined,
-      // keeps the Delete Post trigger on error re-renders (the confirm dialog itself is outside the swap)
-      showDelete: true
-    })
+    // HTMX failures re-render the form fragment (keeping the Delete Post trigger — the confirm dialog
+    // itself is outside the swap); no-JS failures re-render the full page (mirrors GET /posts/:uid/edit)
+    const rerender: PostFormRerender = (values, errors, imageDroppedNote) =>
+      utils.formErrorResponse(
+        c,
+        PostForm({
+          ...values,
+          action: `/posts/${post.uid}/edit`,
+          submitLabel: 'Save Post',
+          statusOptions: editStatusOptions(post.status),
+          imageUrl: post.imageUrl ?? undefined,
+          showDelete: true,
+          errors,
+          imageDroppedNote
+        }),
+        EditPostPage({
+          uid: post.uid,
+          ...values,
+          statusOptions: editStatusOptions(post.status),
+          imageUrl: post.imageUrl ?? undefined,
+          errors,
+          imageDroppedNote
+        }),
+        // 'user' carries the shared delete-modal styling
+        { title: 'Edit Post', description: 'Edit your post.', styles: ['user', 'auth'] }
+      )
+    const result = await processPostForm(c, user.uid, editPostSchema, rerender)
     if ('response' in result) return result.response
     const { data, uploadedImageUrl } = result
 
@@ -326,12 +315,13 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     return utils.redirect(c, `/profile/${user.uid}`)
   })
 
-  posts.get('/:uid', async (c) => {
-    const { auth, db, config } = c.var
-    const viewerUid = auth.user?.uid
-    if (viewerUid == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
-    const post = await loadVisiblePost(c, viewerUid)
-
+  // the full post page; also re-rendered (with commentForm values/errors) when a no-JS comment submit fails
+  async function renderPostView(
+    c: Context,
+    post: Awaited<ReturnType<typeof loadVisiblePost>>,
+    commentForm?: { content?: string; errors?: Record<string, string[]> }
+  ) {
+    const { db, config } = c.var
     const [commentRows, countRow] = await Promise.all([
       db
         .selectFrom('comments')
@@ -368,7 +358,7 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         author: {
           uid: row.authorUid,
           name: info.fullname ?? row.authorUsername,
-          imageUrl: displayImageUrl(info, config.baseImageUrl)
+          imageUrl: utils.displayImageUrl(info, config.baseImageUrl)
         }
       }
     })
@@ -383,10 +373,11 @@ export default function PostRoutes(app: Hono, logger: Logger) {
           linkText: post.linkText,
           created: post.created,
           updated: post.updated,
-          author: { uid: post.authorUid, name: authorName, imageUrl: displayImageUrl(authorInfo, config.baseImageUrl) }
+          author: { uid: post.authorUid, name: authorName, imageUrl: utils.displayImageUrl(authorInfo, config.baseImageUrl) }
         },
         comments,
-        commentLimitReached: Number(countRow?.total ?? 0) >= COMMENT_LIMIT
+        commentLimitReached: Number(countRow?.total ?? 0) >= COMMENT_LIMIT,
+        commentForm
       }),
       {
         title: `Post by ${authorName}`,
@@ -394,6 +385,13 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         styles: ['profile', 'home', 'auth', 'post']
       }
     )
+  }
+
+  posts.get('/:uid', async (c) => {
+    const viewerUid = c.var.auth.user?.uid
+    if (viewerUid == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+    const post = await loadVisiblePost(c, viewerUid)
+    return renderPostView(c, post)
   })
 
   posts.post('/:uid/comments', async (c) => {
@@ -405,8 +403,12 @@ export default function PostRoutes(app: Hono, logger: Logger) {
     const formData = await c.req.formData()
     const contentValue = formData.get('content')
     const form = { content: typeof contentValue === 'string' ? contentValue : '' }
-    const rerender = (content: string | undefined, errors: Record<string, string[]>) =>
-      c.html(CommentForm({ postUid: post.uid, content, errors }))
+    // HTMX failures re-render the form fragment; no-JS failures re-render the full post page
+    // (built here rather than via utils.formErrorResponse since the page needs the comment queries)
+    const rerender = (content: string | undefined, errors: Record<string, string[]>) => {
+      if (c.req.header('HX-Request') === 'true') return c.html(CommentForm({ postUid: post.uid, content, errors }))
+      return renderPostView(c, post, { content, errors })
+    }
 
     const result = utils.validateFormData<CommentFormData>(form, commentSchema)
     if (!result.success) {

@@ -4,8 +4,8 @@ import AccountValidationSuccessPage from '@pages/account-validation-success'
 import ResendValidationPage from '@pages/resend-validation'
 import SignUpPage from '@pages/sign-up'
 import ResendValidationForm from '@templates/components/resend-validation-form'
-import SignUpForm from '@templates/components/sign-up-form'
-import type { Hono } from 'hono'
+import SignUpForm, { type SignUpFormProps } from '@templates/components/sign-up-form'
+import type { Context, Hono } from 'hono'
 import normalizeEmail from 'normalize-email'
 import type { Logger } from 'pino'
 import Uniquey from 'uniquey'
@@ -16,8 +16,6 @@ import * as utils from '@/utils'
 
 const uniquey = new Uniquey() // short by design: public uid, not a secret
 const tokenUniquey = new Uniquey({ length: 32 })
-
-const TOKEN_TTL_MS = 48 * 60 * 60 * 1000
 
 // shared by sign-up and resend so the validation URL / email construction lives in one place
 async function sendValidationEmail(
@@ -56,6 +54,18 @@ const signUpSchema = z
 
 type SignUpData = z.infer<typeof signUpSchema>
 
+// HTMX failures re-render the form fragment; no-JS failures re-render the full page (mirrors GET /sign-up).
+// Password values are never rendered by the form (password inputs don't render values)
+function signUpError(c: Context, values: SignUpFormProps, errors: Record<string, string[]>, status?: 500) {
+  return utils.formErrorResponse(
+    c,
+    SignUpForm({ ...values, errors }),
+    SignUpPage({ ...values, errors }),
+    { title: 'Sign Up', description: 'Create an account for socialstuffs.', styles: ['auth'] },
+    status
+  )
+}
+
 export default function SignUpRoutes(app: Hono, logger: Logger) {
   logger.info('Registering sign-up routes')
 
@@ -67,7 +77,11 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     windowMs: 60 * 60 * 1000,
     max: 10,
     keyPrefix: 'sign-up',
-    onLimit: (c) => c.html(SignUpForm({ errors: { form: ['Too many attempts. Please try again later.'] } }))
+    // echo the typed values back so a 429 doesn't wipe the form (the limiter already set the 429 status)
+    onLimit: async (c) => {
+      const form = await utils.formStrings(c)
+      return signUpError(c, form, { form: ['Too many attempts. Please try again later.'] })
+    }
   })
 
   app.post('/sign-up', signUpLimit, async (c) => {
@@ -80,7 +94,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     // schema errors: re-render the form immediately without normalizing or touching the db
     if (!result.success) {
       logger.warn({ errors: result.errors }, 'Validation errors on sign-up form')
-      return c.html(SignUpForm({ ...form, errors: result.errors }))
+      return signUpError(c, form, result.errors)
     }
 
     const { data } = result
@@ -109,7 +123,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
 
     if (Object.keys(errors).length > 0) {
       logger.warn({ errors }, 'Validation errors on sign-up form')
-      return c.html(SignUpForm({ ...data, errors }))
+      return signUpError(c, data, errors)
     }
 
     try {
@@ -153,7 +167,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
       return utils.redirect(c, '/sign-in')
     } catch (error) {
       utils.logError(logger, error, 'Error creating user')
-      return c.html(SignUpForm({ ...data, errors: { form: ['An unexpected error occurred. Please try again later.'] } }), 500)
+      return signUpError(c, data, { form: ['An unexpected error occurred. Please try again later.'] }, 500)
     }
   })
 
@@ -169,7 +183,17 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     windowMs: 60 * 60 * 1000,
     max: 5,
     keyPrefix: 'resend-validation',
-    onLimit: (c) => c.html(ResendValidationForm({ errors: { form: ['Too many attempts. Please try again later.'] } }))
+    // echo the typed email back so a 429 doesn't wipe the form (the limiter already set the 429 status)
+    onLimit: async (c) => {
+      const form = await utils.formStrings(c)
+      const errors = { form: ['Too many attempts. Please try again later.'] }
+      return utils.formErrorResponse(
+        c,
+        ResendValidationForm({ email: form.email, errors }),
+        ResendValidationPage({ email: form.email, errors }),
+        { title: 'Resend Validation', description: 'Request a new account validation link.', styles: ['auth'] }
+      )
+    }
   })
 
   app.post('/resend-validation', resendLimit, async (c) => {
@@ -253,7 +277,7 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
       } else if (tokenRow.claimed) {
         logger.warn({ uid }, 'Account validation token has already been claimed')
         invalidToken = true
-      } else if (Date.now() - tokenRow.created.getTime() > TOKEN_TTL_MS) {
+      } else if (Date.now() - tokenRow.created.getTime() > utils.TOKEN_TTL_MS) {
         logger.warn({ uid }, 'Account validation token has expired')
         invalidToken = true
       }

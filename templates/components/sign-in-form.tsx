@@ -1,8 +1,10 @@
 import TextInput from './text-input'
 
-type SignInFormProps = {
+export type SignInFormProps = {
   email?: string
   password?: string
+  // deep link to return to after sign-in; already validated as a same-site path by the route
+  next?: string
   errors?: Record<string, string[]>
 }
 
@@ -25,6 +27,7 @@ const SignInForm = (props: SignInFormProps) => {
           ))}
         </div>
       )}
+      {props.next && <input type="hidden" name="next" value={props.next} />}
       <TextInput
         id="email"
         name="email"

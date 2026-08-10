@@ -73,7 +73,8 @@ describe('errorHandler / notFoundHandler HTMX handling', () => {
     })
 
     expect(res.status).toBe(401)
-    expect(res.headers.get('HX-Redirect')).toBe('/sign-in')
+    // GET deep links carry a next param so sign-in can return the user to where they were headed
+    expect(res.headers.get('HX-Redirect')).toBe('/sign-in?next=%2Fuser')
     expect(res.headers.get('HX-Reswap')).toBeNull()
 
     const sid = sessionIdFromResponse(res)
@@ -84,7 +85,7 @@ describe('errorHandler / notFoundHandler HTMX handling', () => {
     const res = await app.request('http://localhost/user')
 
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/sign-in')
+    expect(res.headers.get('location')).toBe('/sign-in?next=%2Fuser')
     expect(res.headers.get('HX-Redirect')).toBeNull()
     expect(res.headers.get('HX-Reswap')).toBeNull()
 

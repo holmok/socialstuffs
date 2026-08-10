@@ -36,11 +36,18 @@ export function errorHandler(): ErrorHandler {
     if (err instanceof HTTPException && err.status < 500) {
       if (err.status === 401) {
         await flash.addFlash('error', 'You must be signed in to access that page.')
+        // carry the deep link through sign-in so the user lands back where they were headed (GETs only —
+        // replaying a POST target as a GET after sign-in would 404 or worse)
+        let signInPath = '/sign-in'
+        if (c.req.method === 'GET') {
+          const url = new URL(c.req.url)
+          signInPath = `/sign-in?next=${encodeURIComponent(url.pathname + url.search)}`
+        }
         if (isHtmxRequest(c)) {
-          c.header('HX-Redirect', '/sign-in')
+          c.header('HX-Redirect', signInPath)
           return c.body(null, 401)
         }
-        return c.redirect('/sign-in')
+        return c.redirect(signInPath)
       }
       logger.warn({ status: err.status, path: c.req.path, msg: err.message }, 'Request error')
       return renderError(c, err.status as ContentfulStatusCode, err.message)

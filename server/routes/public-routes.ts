@@ -1,4 +1,5 @@
 import type { UserProfileInfo } from '@data/user-data'
+import { passwordVersion } from '@middleware/auth-middleware'
 import AboutPage from '@pages/about'
 import ContactPage from '@templates/pages/contact'
 import HomeAnonPage from '@templates/pages/home-anon'
@@ -8,14 +9,6 @@ import TermsPage from '@templates/pages/terms'
 import type { Context, Hono } from 'hono'
 import type { Logger } from 'pino'
 import * as utils from '@/utils'
-
-const POSTS_PER_PAGE = 5
-
-// users without an uploaded photo get the shared placeholder image from the bucket (mirrors profile-routes)
-function displayImageUrl(info: UserProfileInfo, baseImageUrl: string) {
-  const base = baseImageUrl.endsWith('/') ? baseImageUrl : `${baseImageUrl}/`
-  return info.profileImageUrl ?? new URL('profile.jpg', base).href
-}
 
 // published posts from the viewer themselves plus active authors in the viewer's circle (people the
 // viewer favorited or approved), the latter narrowed to what each post's audience lets the viewer
@@ -60,7 +53,16 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
   app.get('/', async (c) => {
     const { auth, config } = c.var
 
-    if (auth.user == null) {
+    // re-check the DB like authorize() does: JWT claims are a sign-in-time snapshot, and a banned/
+    // deleted user (or one whose password changed) must lose the feed now, not at the 7-day exp
+    let revoked = false
+    if (auth.user != null) {
+      const row = await auth.getUserRow()
+      revoked = row == null || row.status !== 'active' || passwordVersion(row.passwordHash) !== auth.user.pwv
+      if (revoked) await auth.signOut()
+    }
+
+    if (auth.user == null || revoked) {
       return c.render(HomeAnonPage(), {
         title: 'Home',
         description: 'A great place to hang out and share your thoughts.',
@@ -96,12 +98,12 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
       // id breaks ties so posts created in the same instant keep a stable order across pages
       .orderBy('posts.created', 'desc')
       .orderBy('posts.id', 'desc')
-      .limit(POSTS_PER_PAGE + 1)
-      .offset((page - 1) * POSTS_PER_PAGE)
+      .limit(utils.POSTS_PER_PAGE + 1)
+      .offset((page - 1) * utils.POSTS_PER_PAGE)
       .execute()
-    const hasOlder = rows.length > POSTS_PER_PAGE
+    const hasOlder = rows.length > utils.POSTS_PER_PAGE
 
-    const posts: FeedPost[] = rows.slice(0, POSTS_PER_PAGE).map((row) => {
+    const posts: FeedPost[] = rows.slice(0, utils.POSTS_PER_PAGE).map((row) => {
       const info = row.authorInfo as UserProfileInfo
       return {
         uid: row.uid,
@@ -115,7 +117,7 @@ export default function PublicRoutes(app: Hono, logger: Logger) {
         author: {
           uid: row.authorUid,
           name: info.fullname ?? row.authorUsername,
-          imageUrl: displayImageUrl(info, config.baseImageUrl)
+          imageUrl: utils.displayImageUrl(info, config.baseImageUrl)
         }
       }
     })

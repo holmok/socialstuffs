@@ -138,7 +138,7 @@ describe('GET /posts/:uid — visibility', () => {
   test('unauthenticated view redirects to /sign-in', async () => {
     const res = await get('/posts/some-uid')
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('/sign-in')
+    expect(res.headers.get('location')).toBe('/sign-in?next=%2Fposts%2Fsome-uid')
   })
 
   test('the author sees their published post with the empty comments section and form', async () => {

@@ -1,6 +1,6 @@
 import TextInput from './text-input'
 
-type ResendValidationFormProps = {
+export type ResendValidationFormProps = {
   email?: string
   errors?: Record<string, string[]>
 }

@@ -123,14 +123,37 @@ describe('GET /', () => {
     const body = await res.text()
     expect(body).toContain('Create your account')
     expect(body).not.toContain('Latest Posts from Your Circle')
+    // the New Post nav item is authenticated-only
+    expect(body).not.toContain('href="/posts/new"')
   })
 
-  test('a signed-in user with an empty circle sees the empty-feed message', async () => {
+  test('a signed-in user with an empty circle sees the empty-feed message with a New Post link', async () => {
     const viewer = await seedUser('fempty')
     const cookie = await signIn(viewer)
     const body = await (await get('/', cookie)).text()
     expect(body).toContain('Latest Posts from Your Circle')
     expect(body).toContain('Nothing here yet.')
+    // the empty state links to composing a first post, and the nav carries New Post for signed-in users
+    expect(body).toContain('write your first post')
+    expect(body).toContain('href="/posts/new"')
+  })
+
+  test('a banned user loses the feed immediately: the same cookie now gets the anonymous page', async () => {
+    const viewer = await seedUser('frevk')
+    const cookie = await signIn(viewer)
+    const before = await (await get('/', cookie)).text()
+    expect(before).toContain('Latest Posts from Your Circle')
+
+    await db.updateTable('users').set({ status: 'inactive' }).where('id', '=', viewer.id).execute()
+
+    const res = await get('/', cookie)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Create your account')
+    expect(body).not.toContain('Latest Posts from Your Circle')
+    // and the response revokes the stale auth cookie
+    const cleared = res.headers.getSetCookie().find((s) => s.startsWith(`${config.auth.userCookieName}=`))
+    expect(cleared).toContain('Max-Age=0')
   })
 
   test('the feed applies the circle and audience rules', async () => {
