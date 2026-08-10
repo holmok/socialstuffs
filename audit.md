@@ -1,5 +1,7 @@
 # Project Audit — socialstuffs
 
+> **Status (2026-08-10):** every finding in this audit has been addressed — P0/P1 landed directly on main, P2 via PRs #40–#45, P3 via PRs #46–#50. See [tasks.md](tasks.md) for the per-task disposition. This document remains as the point-in-time record.
+
 **Date:** 2026-08-09
 **Method:** Five parallel review passes — security, performance, user experience, UI/accessibility, and code patterns/practices — each verifying findings against the actual code with file references. Findings that surfaced in more than one pass are merged and cross-referenced.
 **Scope:** `server/`, `templates/`, `static/`, `migrations/`, `scripts/`.

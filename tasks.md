@@ -49,17 +49,19 @@ Merge order: **#42 → #43 → #44 → #40 → #41 → docs PR** (#43 and #44 ar
 - [x] **35. Comment anchor on redirect** (UX-11, S) — comments carry `id="comment-<uid>"`; redirect targets the new comment's anchor. *(PR #43)*
 - [x] **36. DB re-check on the home feed** (SEC-5, S) — revoked/banned users get signed out and see the anonymous home page immediately. *(PR #40)*
 
-## P3 — Cleanups & polish
+## P3 — Cleanups & polish (all done 2026-08-10 via PRs #46–#50)
 
-- [ ] **37. Remove dead code** (PP-8, S) — drop `cachedQueries` (migration), delete `templates/pages/user.tsx`, remove the `DenormalizedInfo` scrub. `migrations/`, `server/api/user-data-api.ts`
-- [ ] **38. Session tests + renderCSS test + info-page smoke** (PP-9, M) — `server/middleware/session-middleware.test.ts`, `server/styles/index.test.ts`
-- [ ] **39. Type `users.info` properly** (PP-6, M) — kill the ~10 `as UserProfileInfo` casts via the table type or one owning accessor. `server/data/user-data.ts` + call sites
-- [ ] **40. One form-parsing helper + one error-handling rule** (PP-10, M) — `formStrings()`; align sign-in/sign-up try/catch style with the rest. Auth + form routes
-- [ ] **41. Copy fixes** (UX-10, S) — success/info flash consistency, sign-in placeholder, upfront password-rule hint, marketing audience sentence, styled CSRF 403.
-- [ ] **42. Style mixins** (UI-9, M) — `hairline`, `avatar(size)`, accent button, card surface in a `_mixins.ts`; scope form-style's bare `h1` rule; drop empty `src=""`; decide on the CSS-nesting browser baseline.
-- [ ] **43. AT feedback details** (UI-8, S) — un-hide the "Working…" indicators as `aria-live=polite`, wire char counters via `aria-describedby` + live region, add a skip-to-content link.
-- [ ] **44. Rotate/clear session across auth boundary** (SEC-7, S) — fresh id on sign-in; clear cookie + kv rows on sign-out. `server/middleware/auth-middleware.ts`, `session-middleware.ts`
-- [ ] **45. Flash pop fast-path** (PERF-6, M) — "has-flash" cookie gate before the kv DELETE-per-page-render. `server/middleware/flash-middleware.ts`
-- [ ] **46. Bound the favorites strip & export downloads** (PERF-8, M) — LIMIT + "see all"; bounded-concurrency image fetches. `server/routes/profile-routes.ts`, `server/api/user-data-api.ts`
-- [ ] **47. Lazy rate-limiter sweep** (PERF-9, S) — stop iterating the whole map per request. `server/middleware/rate-limit-middleware.ts`
-- [ ] **48. Housekeeping** (PP-12, S) — move delete-modal CSS out of the `user` bundle, derive the `style` union from `stylesMap`, verify/document the `dotenv` dep, note migration conventions (timestamptz, index naming) in CLAUDE.md.
+Merge order: **#46 → #47 → #48 → #49 → #50 (docs)**. Each code PR was written by an implementer agent and adversarially reviewed (with fixes) before opening.
+
+- [x] **37. Remove dead code** (PP-8, S) — `cachedQueries` dropped via migration (faithful `down()`), `templates/pages/user.tsx` deleted, `DenormalizedInfo` scrub removed (git-history pickaxe confirmed no writer ever existed). *(PR #46)*
+- [x] **38. Session tests + renderCSS test + info-page smoke** (PP-9, M) — session-middleware tests in *(PR #47)*; renderCSS unit tests + info-page smoke tests in *(PR #48)*.
+- [x] **39. Type `users.info` properly** (PP-6, M) — column typed `UserProfileInfo & UserMeta`; all 11 casts removed; copy-before-mutate fixed. *(PR #46)*
+- [x] **40. One form-parsing idiom + one error-handling rule** (PP-10, M) — `utils.formStrings` at all six cast sites; sign-in/sign-up/reset-POST catch-alls removed so unexpected throws hit the errorHandler (deliberate catches kept and commented). *(PR #49)*
+- [x] **41. Copy fixes** (UX-10, S) — success/info flash consistency, sign-in placeholder, upfront password-rule notes, four-audience marketing copy, styled CSRF 403 via new `csrfProtect()` middleware. *(PR #48)*
+- [x] **42. Style mixins + flattened renderCSS** (UI-9, M) — `_mixins.ts` (hairline/avatar/accent-button/card-surface), form-style `h1` scoped to `.form-heading`, empty `src` dropped, and renderCSS now emits flat descendant selectors (older-browser safe; CSS-parity diff showed zero unintended changes). *(PR #48)*
+- [x] **43. AT feedback details** (UI-8, S) — "Working…" indicators are polite live regions, char counters wired via `aria-describedby` + live region, skip-to-content link added. *(PR #48)*
+- [x] **44. Rotate/clear session across auth boundary** (SEC-7, S) — `session.rotate()` on sign-in and inside `signOut()`; review pass also hardened the kv-row cleanup against LIKE metacharacters. *(PR #47)*
+- [x] **45. Flash pop fast-path** (PERF-6, M) — marker cookie set by `addFlash`; `getFlashes` skips the kv DELETE when absent. *(PR #47)*
+- [x] **46. Bound the favorites strip & export downloads** (PERF-8, M) — strip capped at 20 with an "…and more" indicator; export images download 4-at-a-time (chunk-boundary test added in review). *(PR #46)*
+- [x] **47. Lazy rate-limiter sweep** (PERF-9, S) — per-key eviction on access + time-gated/at-cap full sweeps; security properties test-locked. *(PR #47)*
+- [x] **48. Housekeeping** (PP-12, S) — modal/danger-button/form-note CSS moved to global, `style` union derived from `stylesMap` *(PR #48)*; `dotenv` dep documented and migration conventions noted in CLAUDE.md *(PR #50, docs)*.
