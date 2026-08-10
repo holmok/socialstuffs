@@ -49,7 +49,10 @@ const HomeAnonPage = () => {
           </li>
           <li>
             <h3>You choose who sees each post</h3>
-            <p>Each post can go to everyone, just your favorites, or only the people you've approved.</p>
+            <p>
+              Each post can go to everyone, everyone except people you've disapproved, only people you've approved, or just your
+              favorites.
+            </p>
           </li>
           <li>
             <h3>Kept safe and friendly</h3>

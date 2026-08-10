@@ -41,10 +41,13 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body id="top">
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
         <Header isAuthenticated={isAuthenticated} />
         {/* permanent landing zone for flash messages, including OOB error fragments */}
         <div id="flash-region">{flashes && <Flash flashes={flashes} />}</div>
-        <main>{children}</main>
+        <main id="main-content">{children}</main>
         <Footer />
       </body>
     </html>

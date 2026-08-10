@@ -1,8 +1,7 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { avatar, hairline } from '../_mixins'
 import * as vars from '../_vars'
-
-const hairline = `${vars.borderWidthMain} solid ${colors.borderColor}`
 
 export default {
   '.profile-page': {
@@ -116,11 +115,7 @@ export default {
     borderRadius: '50%'
   },
   '.profile-favorite-avatar': {
-    width: '48px',
-    height: '48px',
-    objectFit: 'cover',
-    borderRadius: '50%',
-    backgroundColor: colors.bgSurfaceLight,
+    ...avatar(48),
     border: hairline
   },
   '.profile-favorites a:hover .profile-favorite-avatar': {

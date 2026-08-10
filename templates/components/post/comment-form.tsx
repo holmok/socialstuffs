@@ -38,12 +38,14 @@ const CommentForm = (props: CommentFormProps) => {
           data-charcount="comment-content-char-count"
           data-charmax="200"
           aria-invalid={contentErrors?.length ? 'true' : undefined}
-          aria-describedby={contentErrors?.length ? 'comment-content-errors' : undefined}
+          aria-describedby={
+            contentErrors?.length ? 'comment-content-errors comment-content-char-count' : 'comment-content-char-count'
+          }
           className={contentErrors?.length ? 'error' : undefined}
         >
           {props.content}
         </textarea>
-        <p id="comment-content-char-count" className="char-count">
+        <p id="comment-content-char-count" className="char-count" aria-live="polite">
           {(props.content ?? '').length}/200 characters
         </p>
         {contentErrors && contentErrors.length > 0 && (
@@ -55,7 +57,7 @@ const CommentForm = (props: CommentFormProps) => {
         )}
       </div>
       <button type="submit">Add Comment</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
     </form>

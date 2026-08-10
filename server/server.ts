@@ -8,7 +8,6 @@ import Routes from '@routes/index'
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
 import { compress } from 'hono/compress'
-import { csrf } from 'hono/csrf'
 import { etag } from 'hono/etag'
 import { secureHeaders } from 'hono/secure-headers'
 import type { PinoLogger } from 'hono-pino'
@@ -71,7 +70,8 @@ export function createApp(config: Config, logger: Logger) {
     etag(),
     serveStatic({ root: './static' })
   )
-  app.use(csrf())
+  // wraps hono's csrf() so a rejection renders the styled error page instead of a bare 403 fragment
+  app.use(m.csrfProtect())
   app.use(m.authenticate())
   app.use(m.session())
   app.use(m.flash())

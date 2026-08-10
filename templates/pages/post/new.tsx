@@ -6,7 +6,7 @@ type NewPostPageProps = Omit<PostFormProps, 'action' | 'submitLabel' | 'statusOp
 const NewPostPage = (form: NewPostPageProps = {}) => {
   return (
     <div>
-      <h1>New Post</h1>
+      <h1 className="form-heading">New Post</h1>
       <PostForm {...form} action="/posts/new" submitLabel="Create Post" statusOptions={createStatusOptions} />
     </div>
   )

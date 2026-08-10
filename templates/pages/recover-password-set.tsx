@@ -4,7 +4,7 @@ import SetPasswordForm, { type SetPasswordFormProps } from '@templates/component
 const RecoverPasswordSetPage = (props: SetPasswordFormProps) => {
   return (
     <>
-      <h1>Set a New Password</h1>
+      <h1 className="form-heading">Set a New Password</h1>
       <p>Choose a new password for your account.</p>
       <SetPasswordForm {...props} />
     </>

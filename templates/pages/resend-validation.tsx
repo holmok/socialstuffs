@@ -4,7 +4,7 @@ import ResendValidationForm, { type ResendValidationFormProps } from '@templates
 const ResendValidationPage = (props: ResendValidationFormProps = {}) => {
   return (
     <>
-      <h1>Resend Validation Email</h1>
+      <h1 className="form-heading">Resend Validation Email</h1>
       <p>Enter your email and, if it matches a pending account, we'll send a new validation link.</p>
       <ResendValidationForm {...props} />
     </>

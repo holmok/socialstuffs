@@ -1,16 +1,15 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
+import { accentButton, avatar, cardSurface } from '../_mixins'
 import * as vars from '../_vars'
 
 export default {
-  h1: {
+  // scoped to the form pages' own headings so other pages loading this bundle keep left-aligned h1s
+  'h1.form-heading': {
     textAlign: 'center'
   },
   '.form': {
-    backgroundColor: colors.bgSurface,
-    border: `${vars.borderWidthMain} solid ${colors.borderColor}`,
-    borderRadius: vars.borderRadiusMain,
-    padding: vars.spacingMain,
+    ...cardSurface,
     maxWidth: vars.maxWidthForm,
     margin: '0 auto',
     label: {
@@ -107,13 +106,9 @@ export default {
       textAlign: 'center'
     },
     '.image-preview': {
+      ...avatar(192),
       display: 'block',
-      width: '192px',
-      height: '192px',
-      objectFit: 'cover',
-      borderRadius: '50%',
-      margin: `0 auto ${vars.spacingSmall}`,
-      backgroundColor: colors.bgSurfaceLight
+      margin: `0 auto ${vars.spacingSmall}`
     },
     // rectangular preview for post photos; starts hidden until a file is picked.
     // sized like the profile's post images: full width, tall images crop to their vertical middle
@@ -188,10 +183,8 @@ export default {
       marginLeft: `calc(${vars.spacingSmall} * -1)`
     },
     button: {
-      width: '100%',
-      backgroundColor: colors.accentOrange,
-      color: colors.bgMain,
-      fontWeight: '600'
+      ...accentButton,
+      width: '100%'
     },
     'button:hover': {
       backgroundColor: colors.fgAccent

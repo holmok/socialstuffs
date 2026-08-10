@@ -36,7 +36,7 @@ const ResendValidationForm = (props: ResendValidationFormProps) => {
         required
       />
       <button type="submit">Resend Validation Link</button>
-      <span className="form-indicator" aria-hidden="true">
+      <span className="form-indicator" aria-live="polite">
         Working…
       </span>
       <p className="form-alt">
