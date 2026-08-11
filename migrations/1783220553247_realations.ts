@@ -13,8 +13,8 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     friend_id: { type: 'integer', notNull: true, references: users },
     friend_uid: { type: 'text', notNull: true },
     type: { type: 'relation_type', notNull: true },
-    created: { type: 'timestamp', notNull: true, default: pgm.func('current_timestamp') },
-    updated: { type: 'timestamp', notNull: false }
+    created: { type: 'timestamptz', notNull: true, default: pgm.func('current_timestamp') },
+    updated: { type: 'timestamptz', notNull: false }
   })
 
   pgm.addConstraint(relations, 'unique_user_friend_uid', {

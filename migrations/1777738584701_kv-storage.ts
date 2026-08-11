@@ -7,8 +7,8 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     id: { type: 'serial', primaryKey: true },
     key: { type: 'text', notNull: true, unique: true },
     value: { type: 'text', notNull: false },
-    created: { type: 'timestamp', notNull: true, default: pgm.func('current_timestamp') },
-    expires: { type: 'timestamp', notNull: true }
+    created: { type: 'timestamptz', notNull: true, default: pgm.func('current_timestamp') },
+    expires: { type: 'timestamptz', notNull: true }
   })
 
   pgm.createIndex(kvStorage, 'key', { name: 'idx_kvStorage_key' })

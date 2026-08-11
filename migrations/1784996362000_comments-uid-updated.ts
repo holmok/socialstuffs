@@ -6,7 +6,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   pgm.addColumns(comments, {
     uid: { type: 'text', notNull: false },
     // stays null until the comment is edited — a non-null value means "edited"
-    updated: { type: 'timestamp', notNull: false }
+    updated: { type: 'timestamptz', notNull: false }
   })
   // backfill any pre-existing rows, then lock the column down
   pgm.sql('UPDATE socialstuffs.comments SET uid = md5(random()::text || id::text) WHERE uid IS NULL')

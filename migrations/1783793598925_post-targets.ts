@@ -13,8 +13,8 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     user_id: { type: 'integer', notNull: true, references: users },
     user_uid: { type: 'text', notNull: true },
     type: { type: 'post_target_type', notNull: true },
-    created: { type: 'timestamp', notNull: true, default: pgm.func('current_timestamp') },
-    updated: { type: 'timestamp', notNull: false }
+    created: { type: 'timestamptz', notNull: true, default: pgm.func('current_timestamp') },
+    updated: { type: 'timestamptz', notNull: false }
   })
 
   pgm.addConstraint(postTargets, 'post_targets_unique_post_user_uid', {

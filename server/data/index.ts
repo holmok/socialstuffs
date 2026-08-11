@@ -4,16 +4,19 @@ import type { Logger } from 'pino'
 import type { AccountValidationTable } from './account-validation-token-data'
 import type { CommentTable } from './comment-data'
 import type { FavoriteTable } from './favorite-data'
+import type { InviteCodeTable } from './invite-code-data'
 import type { KvStoreTable } from './kv-storage-data'
 import type { PasswordRecoveryTable } from './password-recovery-token-data'
 import type { PostTable } from './post-data'
 import type { PostTargetsTable } from './post-target-data'
 import type { RelationsTable } from './relation-data'
 import type { UserTable } from './user-data'
+import type { WaitlistTable } from './waitlist-data'
 
 export * from './account-validation-token-data'
 export * from './comment-data'
 export * from './favorite-data'
+export * from './invite-code-data'
 export * from './kv-storage-data'
 export * from './password-recovery-token-data'
 export * from './post-data'
@@ -42,4 +45,6 @@ export type Database = {
   favorites: FavoriteTable
   postTargets: PostTargetsTable
   comments: CommentTable
+  waitlist: WaitlistTable
+  inviteCodes: InviteCodeTable
 }

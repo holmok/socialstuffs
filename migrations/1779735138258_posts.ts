@@ -16,8 +16,8 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     linkUrl: { type: 'text', notNull: false },
     linkText: { type: 'text', notNull: false },
     status: { type: 'post_status', notNull: true, default: 'published' },
-    updated: { type: 'timestamp', notNull: false, default: pgm.func('current_timestamp') },
-    created: { type: 'timestamp', notNull: true, default: pgm.func('current_timestamp') }
+    updated: { type: 'timestamptz', notNull: false, default: pgm.func('current_timestamp') },
+    created: { type: 'timestamptz', notNull: true, default: pgm.func('current_timestamp') }
   })
 
   pgm.createIndex(posts, 'userUid', { name: 'idx_posts_userUid' })

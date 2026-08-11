@@ -10,7 +10,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     user_uid: { type: 'text', notNull: true },
     friend_id: { type: 'integer', notNull: true, references: users },
     friend_uid: { type: 'text', notNull: true },
-    created: { type: 'timestamp', notNull: true, default: pgm.func('current_timestamp') }
+    created: { type: 'timestamptz', notNull: true, default: pgm.func('current_timestamp') }
   })
 
   pgm.addConstraint(favorites, 'favorites_unique_user_friend_uid', {

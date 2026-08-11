@@ -11,7 +11,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
     userId: { type: 'integer', notNull: true, references: users, onDelete: 'NO ACTION' },
     postId: { type: 'integer', notNull: false, references: posts, onDelete: 'NO ACTION' },
     content: { type: 'text', notNull: true },
-    created: { type: 'timestamp', notNull: true, default: pgm.func('current_timestamp') }
+    created: { type: 'timestamptz', notNull: true, default: pgm.func('current_timestamp') }
   })
 
   pgm.createIndex(comments, 'postId', { name: 'idx_comments_postId' })
