@@ -17,8 +17,17 @@ export function layoutContext(): MiddlewareHandler {
       const flashes = await c.var.flash.getFlashes()
       const user = c.var.auth.user
       const isAuthenticated = !!user
+      // JWT role claim only drives nav visibility; /admin routes re-check the DB role via authorize()
+      const isAdmin = user?.role === 'admin' || user?.role === 'owner'
       return (
-        <Layout title={title} description={description} styles={styles} flashes={flashes} isAuthenticated={isAuthenticated}>
+        <Layout
+          title={title}
+          description={description}
+          styles={styles}
+          flashes={flashes}
+          isAuthenticated={isAuthenticated}
+          isAdmin={isAdmin}
+        >
           {children}
         </Layout>
       )

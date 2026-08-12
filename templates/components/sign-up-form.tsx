@@ -1,6 +1,7 @@
 import TextInput from './text-input'
 
 export type SignUpFormProps = {
+  inviteCode?: string
   username?: string
   email?: string
   confirmEmail?: string
@@ -28,6 +29,16 @@ const SignUpForm = (props: SignUpFormProps) => {
           ))}
         </div>
       )}
+      <TextInput
+        id="inviteCode"
+        name="inviteCode"
+        label="Invite Code"
+        value={props.inviteCode}
+        errors={props.errors?.inviteCode}
+        placeholder="Enter your invite code..."
+        autocomplete="off"
+        required
+      />
       <TextInput
         id="username"
         name="username"
@@ -90,6 +101,9 @@ const SignUpForm = (props: SignUpFormProps) => {
       </span>
       <p className="form-alt">
         Already signed up? <a href="/sign-in">Sign In</a>
+      </p>
+      <p className="form-alt">
+        No invite code? <a href="/waitlist">Join the waitlist</a>
       </p>
     </form>
   )

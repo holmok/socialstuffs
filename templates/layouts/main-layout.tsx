@@ -11,10 +11,11 @@ interface LayoutProps {
   styles?: style[]
   flashes?: Flashes
   isAuthenticated: boolean
+  isAdmin?: boolean
 }
 
 const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
-  const { children, title, description, styles, flashes, isAuthenticated } = props
+  const { children, title, description, styles, flashes, isAuthenticated, isAdmin = false } = props
   const styleList = new Set<style>(['reset', 'global', ...(styles || [])])
   const styleString = getStyle(Array.from(styleList))
   return (
@@ -44,7 +45,7 @@ const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <a className="skip-link" href="#main-content">
           Skip to content
         </a>
-        <Header isAuthenticated={isAuthenticated} />
+        <Header isAuthenticated={isAuthenticated} isAdmin={isAdmin} />
         {/* permanent landing zone for flash messages, including OOB error fragments */}
         <div id="flash-region">{flashes && <Flash flashes={flashes} />}</div>
         <main id="main-content">{children}</main>

@@ -56,7 +56,7 @@ const SignInForm = (props: SignInFormProps) => {
         Working…
       </span>
       <p className="form-alt">
-        Don't have an account? <a href="/sign-up">Sign up</a> for a FREE account.
+        Have an invite code? <a href="/sign-up">Sign up</a>. Need one? <a href="/waitlist">Join the waitlist</a>.
         <br />
         Forgot your password? <a href="/recover-password">Recover</a> your password.
         <br />

@@ -8,6 +8,12 @@ export default {
   'h1.form-heading': {
     textAlign: 'center'
   },
+  // lead-in copy above a form card (e.g. the waitlist pitch), aligned to the card's width
+  '.form-intro': {
+    maxWidth: vars.maxWidthForm,
+    margin: `0 auto ${vars.spacingMain}`,
+    textAlign: 'center'
+  },
   '.form': {
     ...cardSurface,
     maxWidth: vars.maxWidthForm,

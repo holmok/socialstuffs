@@ -13,6 +13,7 @@ import { z } from 'zod'
 import type { Config } from '@/config'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
+import { checkInviteCode, claimInviteCode, InviteClaimError, newInviteCodeRows } from './invite-helpers'
 import { checkToken, claimToken, type TokenCheckFailure } from './token-helpers'
 
 const uniquey = new Uniquey() // short by design: public uid, not a secret
@@ -38,6 +39,7 @@ async function sendValidationEmail(
 
 const signUpSchema = z
   .object({
+    inviteCode: z.string().trim().min(1, 'Invite code is required.'),
     username: utils.usernameSchema,
     email: utils.emailSchema,
     confirmEmail: z.string().min(1, 'Confirm Email is required.'),
@@ -77,7 +79,12 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
   logger.info('Registering sign-up routes')
 
   app.get('/sign-up', (c) => {
-    return c.render(SignUpPage(), { title: 'Sign Up', description: 'Create an account for socialstuffs.', styles: ['auth'] })
+    // invite emails link here with ?code=<invite code> so the field arrives prefilled
+    return c.render(SignUpPage({ inviteCode: c.req.query('code') }), {
+      title: 'Sign Up',
+      description: 'Create an account for socialstuffs.',
+      styles: ['auth']
+    })
   })
 
   const signUpLimit = m.rateLimit({
@@ -127,6 +134,12 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
       }
     }
 
+    // friendly pre-check; the claim inside the transaction below is what enforces single-use
+    const inviteSource = await checkInviteCode(db, data.inviteCode)
+    if (inviteSource == null) {
+      errors.inviteCode = ['That invite code is not valid or has already been used.']
+    }
+
     if (Object.keys(errors).length > 0) {
       logger.warn({ errors }, 'Validation errors on sign-up form')
       return signUpError(c, data, errors)
@@ -140,26 +153,49 @@ export default function SignUpRoutes(app: Hono, logger: Logger) {
     // No catch-all: in-form errors are reserved for expected validation states (handled above);
     // unexpected throws — including a unique-violation race past the pre-check — go to the
     // errorHandler (OOB flash for HTMX, styled error page for no-JS)
-    // create the user and its validation token atomically
-    const { user, token } = await db.transaction().execute(async (trx) => {
-      const user = await trx
-        .insertInto('users')
-        .values({
-          uid: uniquey.create(),
-          username: data.username,
-          normalizedUsername,
-          email: data.email,
-          normalizedEmail,
-          passwordHash
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow()
+    // create the user, its validation token, the invite-code claim, and the user's own fresh
+    // invite codes atomically; an InviteClaimError rolls all of it back
+    let created: { user: { id: number; uid: string; username: string; email: string }; token: string }
+    try {
+      created = await db.transaction().execute(async (trx) => {
+        const user = await trx
+          .insertInto('users')
+          .values({
+            uid: uniquey.create(),
+            username: data.username,
+            normalizedUsername,
+            email: data.email,
+            normalizedEmail,
+            passwordHash
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
 
-      const token = tokenUniquey.create()
-      await trx.insertInto('accountValidationTokens').values({ token, userId: user.id }).execute()
+        const token = tokenUniquey.create()
+        await trx.insertInto('accountValidationTokens').values({ token, userId: user.id }).execute()
 
-      return { user, token }
-    })
+        const { inviter } = await claimInviteCode(trx, data.inviteCode, user.id)
+        await trx.insertInto('inviteCodes').values(newInviteCodeRows(user.id)).execute()
+
+        // an invite from another user starts the relationship: the inviter becomes a favorite
+        if (inviter) {
+          await trx
+            .insertInto('favorites')
+            .values({ userId: user.id, userUid: user.uid, friendId: inviter.id, friendUid: inviter.uid })
+            .execute()
+        }
+
+        return { user, token }
+      })
+    } catch (error) {
+      // the code was snatched between the pre-check and the claim; nothing was written
+      if (error instanceof InviteClaimError) {
+        logger.warn('Invite code claimed concurrently during sign-up')
+        return signUpError(c, data, { inviteCode: ['That invite code is not valid or has already been used.'] })
+      }
+      throw error
+    }
+    const { user, token } = created
 
     // deliberate catch: the account exists now, so a failed email send is non-fatal — log it and
     // tell the user they can request a new link

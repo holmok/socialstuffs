@@ -11,13 +11,16 @@ const HomeAnonPage = () => {
           you see, and no advertisers looking over your shoulder.
         </p>
         <div class="hero-actions">
-          <a class="cta" href="/sign-up">
-            Create your account
+          <a class="cta" href="/waitlist">
+            Join the Waitlist
           </a>
           <a class="cta quiet" href="/sign-in">
             Sign in
           </a>
         </div>
+        <p class="hero-note">
+          socialstuffs is invite-only while we grow. Already have an invite code? <a href="/sign-up">Sign up here</a>.
+        </p>
       </section>
 
       <section class="pitch">
@@ -85,9 +88,12 @@ const HomeAnonPage = () => {
         <p>
           Want the longer story? It's on the <a href="/about">about page</a>.
         </p>
-        <a class="cta" href="/sign-up">
-          Join socialstuffs
+        <a class="cta" href="/waitlist">
+          Join the Waitlist
         </a>
+        <p class="hero-note">
+          Already have an invite code? <a href="/sign-up">Sign up</a>.
+        </p>
       </section>
     </div>
   )

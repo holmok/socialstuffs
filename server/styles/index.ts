@@ -1,5 +1,6 @@
 import type * as CSS from 'csstype'
 
+import adminStyles from './css/admin-style'
 import errorStyles from './css/error-style'
 import authStyles from './css/form-style'
 import globalStyles from './css/global-style'
@@ -19,7 +20,8 @@ const stylesMap = {
   user: renderCSS(userStyles),
   profile: renderCSS(profileStyles),
   home: renderCSS(homeStyles),
-  post: renderCSS(postStyles)
+  post: renderCSS(postStyles),
+  admin: renderCSS(adminStyles)
 }
 
 export type style = keyof typeof stylesMap

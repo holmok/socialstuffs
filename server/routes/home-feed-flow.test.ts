@@ -121,7 +121,7 @@ describe('GET /', () => {
     const res = await get('/')
     expect(res.status).toBe(200)
     const body = await res.text()
-    expect(body).toContain('Create your account')
+    expect(body).toContain('Join the Waitlist')
     expect(body).not.toContain('Latest Posts from Your Circle')
     // the New Post nav item is authenticated-only
     expect(body).not.toContain('href="/posts/new"')
@@ -149,7 +149,7 @@ describe('GET /', () => {
     const res = await get('/', cookie)
     expect(res.status).toBe(200)
     const body = await res.text()
-    expect(body).toContain('Create your account')
+    expect(body).toContain('Join the Waitlist')
     expect(body).not.toContain('Latest Posts from Your Circle')
     // and the response revokes the stale auth cookie
     const cleared = res.headers.getSetCookie().find((s) => s.startsWith(`${config.auth.userCookieName}=`))

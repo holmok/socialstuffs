@@ -105,9 +105,22 @@ const AboutPage = () => {
       <section>
         <h2>Meeting new people</h2>
         <p>
-          The Meet page is the only discovery feature we have. It shows the newest members, the most favorited and most approved
-          people, and recent public posts. We don't scrape your contacts or guess at "people you may know." And you have to be
-          signed in to see it.
+          The Discover page is the only discovery feature we have. It shows the latest posts members have shared with everyone, so
+          you can find people worth favoriting or approving. We don't scrape your contacts or guess at "people you may know." And
+          you have to be signed in to see it.
+        </p>
+      </section>
+
+      <section>
+        <h2>Getting in</h2>
+        <p>
+          socialstuffs is invite-only while we grow. Every member gets a handful of invite codes to hand out, so most people
+          arrive because someone they know wanted them here. Whoever invites you starts out as one of your favorites, so your feed
+          is never empty on day one.
+        </p>
+        <p>
+          Don't know anyone on the inside? <a href="/waitlist">Join the waitlist</a> and we'll email you an invite code as we're
+          ready for new people. Already holding a code? Head straight to <a href="/sign-up">sign up</a>.
         </p>
       </section>
 

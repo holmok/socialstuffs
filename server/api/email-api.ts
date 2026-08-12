@@ -9,6 +9,8 @@ type EmailTemplate =
   | 'password-recovery-email'
   | 'email-change-validation-email'
   | 'email-change-notice-email'
+  | 'waitlist-invite-email'
+  | 'waitlist-revoke-email'
 
 export type SendEmailOptions = {
   to: string
@@ -36,6 +38,8 @@ export default class EmailAPI {
       'templates/email/email-change-validation-email.html'
     )
     this.templatePaths['email-change-notice-email'] = Path.join(process.cwd(), 'templates/email/email-change-notice-email.html')
+    this.templatePaths['waitlist-invite-email'] = Path.join(process.cwd(), 'templates/email/waitlist-invite-email.html')
+    this.templatePaths['waitlist-revoke-email'] = Path.join(process.cwd(), 'templates/email/waitlist-revoke-email.html')
   }
 
   private async loadTemplate(template: EmailTemplate): Promise<string> {

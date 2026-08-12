@@ -1,6 +1,6 @@
 import type { CSSObject } from '@styles/index'
 import * as colors from '../_colors'
-import { accentButton, avatar, cardSurface } from '../_mixins'
+import { accentButton, avatar, cardSurface, hairline } from '../_mixins'
 import * as vars from '../_vars'
 
 export default {
@@ -135,6 +135,51 @@ export default {
   },
   '.danger-card': {
     borderColor: colors.fgError
+  },
+  '.invite-list': {
+    listStyle: 'none',
+    margin: '0',
+    padding: '0'
+  },
+  '.invite-row': {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: vars.spacingSmall,
+    padding: `${vars.spacingSmall} 0`,
+    borderBottom: hairline
+  },
+  '.invite-row:last-child': {
+    borderBottom: 'none'
+  },
+  // long fixed-length codes: keep them selectable and readable on small screens
+  '.invite-code': {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: vars.fontSizeSmall,
+    letterSpacing: '0.05em',
+    wordBreak: 'break-all',
+    color: colors.fgMain
+  },
+  '.invite-refresh': {
+    backgroundColor: colors.bgSurfaceLight,
+    color: colors.fgMain,
+    fontSize: vars.fontSizeSmall,
+    padding: `${vars.spacingVerySmall} ${vars.spacingSmall}`,
+    borderRadius: vars.borderRadiusSmall
+  },
+  '.invite-refresh:hover': {
+    backgroundColor: colors.borderColor
+  },
+  '.invite-claimed-by': {
+    color: colors.fgMuted,
+    fontSize: vars.fontSizeSmall
+  },
+  '.invite-empty': {
+    color: colors.fgMuted,
+    fontSize: vars.fontSizeSmall,
+    textAlign: 'center',
+    margin: '0'
   },
   '.user-tab a:hover': {
     color: colors.fgMain

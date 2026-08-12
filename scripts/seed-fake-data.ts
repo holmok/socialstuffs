@@ -1,5 +1,6 @@
-// One-off dev seeding: creates fake users, posts (with audience targets), comments, relations,
-// and favorites. Run with: bun run scripts/seed-fake-data.ts
+// One-off dev seeding: creates fake users (each with their invite codes), posts (with audience
+// targets), comments, relations, favorites, and waitlist entries in every state (waiting,
+// invited, claimed). Run with: bun run scripts/seed-fake-data.ts
 // All users get the password below so you can log in as any of them.
 // Rows are written directly through Kysely (mirroring the flow tests), so seeding needs no
 // Google credentials and skips the moderation pipeline the real routes run.
@@ -7,6 +8,7 @@
 // scripts/unseed-fake-data.ts can hard-delete it later.
 
 import getDatabase, { type PostTargetType } from '@data/index'
+import { inviteCodeUniquey, newInviteCodeRows } from '@routes/invite-helpers'
 import normalizeEmail from 'normalize-email'
 import pino from 'pino'
 import Uniquey from 'uniquey'
@@ -84,6 +86,22 @@ const COMMENT_TEXTS = [
   'Reading this while doing the exact same thing.'
 ]
 
+// waitlist entries land in three states: most waiting, a few invited (code sent), one claimed
+const WAITLIST_NAMES = [
+  'harper.finch',
+  'quinn.ellison',
+  'rowan.blake',
+  'sage.donovan',
+  'ellis.marsh',
+  'wren.calloway',
+  'ari.solomon',
+  'nico.fairbanks',
+  'tessa.holt',
+  'jude.crampton'
+] as const
+const WAITLIST_INVITED = 2 // entries with a sent-but-unclaimed invite
+const WAITLIST_CLAIMED = 1 // entries whose invite was claimed (attributed to a seeded user)
+
 const LINKS = [
   { linkUrl: 'https://en.wikipedia.org/wiki/Sourdough', linkText: 'Sourdough deep dive' },
   { linkUrl: 'https://www.allrecipes.com', linkText: 'The recipe I mentioned' },
@@ -159,6 +177,25 @@ try {
   }
   console.log(`created ${seeded.length} users`)
 
+  // 1b. Invite codes — every real sign-up seeds these, so seeded users get theirs too
+  // (no manifest entries: invite_codes.created_by cascades when the users are deleted).
+  // A few are marked claimed by another seeded user so /user/invite-codes shows both sections.
+  let claimedCodes = 0
+  for (const [index, user] of seeded.entries()) {
+    await db.insertInto('inviteCodes').values(newInviteCodeRows(user.id)).execute()
+    if (index % 3 === 0 && seeded.length > 1) {
+      const claimer = pick(seeded.filter((u) => u.id !== user.id))
+      const firstCode = db.selectFrom('inviteCodes').select('id').where('createdBy', '=', user.id).orderBy('id', 'asc').limit(1)
+      await db
+        .updateTable('inviteCodes')
+        .set({ claimedBy: claimer.id, claimed: new Date() })
+        .where('id', 'in', firstCode)
+        .execute()
+      claimedCodes += 1
+    }
+  }
+  console.log(`created invite codes for ${seeded.length} users (${claimedCodes} marked claimed)`)
+
   // 2. Posts with their audience rows
   const publishedPosts: { id: number; uid: string }[] = []
   for (const user of seeded) {
@@ -218,6 +255,39 @@ try {
   }
   console.log(`created ${manifest.relations.length} relations and ${manifest.favorites.length} favorites`)
 
+  // 3b. Waitlist entries — reruns skip emails that already exist. The tail of the list gets
+  // sent invites so /admin/waitlist-unclaimed has rows, and the last is marked claimed (attributed
+  // to a seeded user) so the dashboard's joined-from-waitlist stat is non-zero.
+  let waitlistCreated = 0
+  for (const [index, name] of WAITLIST_NAMES.entries()) {
+    const email = `waitlist.${name.replaceAll(/\W+/g, '.')}@example.com`
+    const existing = await db.selectFrom('waitlist').select(['id']).where('email', '=', email).executeTakeFirst()
+    if (existing != null) {
+      console.log(`skipping waitlist entry ${email} (already exists)`)
+      continue
+    }
+    const entry = await db.insertInto('waitlist').values({ email }).returning(['id']).executeTakeFirstOrThrow()
+    const invited = index >= WAITLIST_NAMES.length - WAITLIST_INVITED - WAITLIST_CLAIMED
+    if (invited) {
+      await db
+        .updateTable('waitlist')
+        .set({ code: inviteCodeUniquey.create(), sent: new Date() })
+        .where('id', '=', entry.id)
+        .execute()
+    }
+    const claimed = index >= WAITLIST_NAMES.length - WAITLIST_CLAIMED
+    if (claimed && seeded.length > 0) {
+      await db
+        .updateTable('waitlist')
+        .set({ claimedBy: pick(seeded).id, claimed: new Date() })
+        .where('id', '=', entry.id)
+        .execute()
+    }
+    manifest.waitlist.push(email)
+    waitlistCreated += 1
+  }
+  console.log(`created ${waitlistCreated} waitlist entries`)
+
   // 4. Record what was created so unseed-fake-data.ts can hard-delete it. Merge with any
   // earlier manifest so reruns (which skip existing usernames) don't lose prior entries.
   const previous = await readManifest()
@@ -228,11 +298,13 @@ try {
     const pairKey = (p: { userUid: string; friendUid: string }) => `${p.userUid}:${p.friendUid}`
     const knownRelations = new Set(manifest.relations.map(pairKey))
     const knownFavorites = new Set(manifest.favorites.map(pairKey))
+    const knownWaitlist = new Set(manifest.waitlist)
     manifest.users.push(...previous.users.filter((u) => !knownUsers.has(u.uid)))
     manifest.posts.push(...previous.posts.filter((uid) => !knownPosts.has(uid)))
     manifest.comments.push(...previous.comments.filter((uid) => !knownComments.has(uid)))
     manifest.relations.push(...previous.relations.filter((p) => !knownRelations.has(pairKey(p))))
     manifest.favorites.push(...previous.favorites.filter((p) => !knownFavorites.has(pairKey(p))))
+    manifest.waitlist.push(...previous.waitlist.filter((email) => !knownWaitlist.has(email)))
   }
   manifest.createdAt = new Date().toISOString()
   await Bun.write(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`)

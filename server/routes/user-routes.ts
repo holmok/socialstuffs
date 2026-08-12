@@ -2,6 +2,7 @@ import { UserDataError } from '@api/user-data-api'
 import type { UserProfileInfo, UserStatus } from '@data/user-data'
 import UserDataPage from '@pages/user/data'
 import EditProfilePage from '@pages/user/edit-profile'
+import InviteCodesPage, { type AvailableInviteCode, type ClaimedInviteCode } from '@pages/user/invite-codes'
 import MyProfilePage from '@pages/user/my-profile'
 import UserSettingsPage from '@pages/user/settings'
 import EditProfileForm from '@templates/components/user/edit-profile-form'
@@ -15,6 +16,7 @@ import { z } from 'zod'
 import * as m from '@/middleware'
 import * as utils from '@/utils'
 import { moderateFields, validateAndUploadImage } from './form-helpers'
+import { inviteCodeUniquey } from './invite-helpers'
 
 const tokenUniquey = new Uniquey({ length: 32 })
 
@@ -319,6 +321,76 @@ export default function UserRoutes(app: Hono, logger: Logger) {
 
     await flash.addFlash(changed ? 'success' : 'info', changed ? 'Settings updated successfully.' : 'No changes made.')
     return utils.redirect(c, '/user/settings')
+  })
+
+  user.get('/invite-codes', async (c) => {
+    const user = await c.var.auth.getUser()
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+
+    const rows = await c.var.db
+      .selectFrom('inviteCodes')
+      .leftJoin('users', 'users.id', 'inviteCodes.claimedBy')
+      .select([
+        'inviteCodes.id as id',
+        'inviteCodes.code as code',
+        'inviteCodes.created as created',
+        'inviteCodes.claimed as claimed',
+        'users.uid as claimedByUid',
+        'users.username as claimedByUsername',
+        'users.info as claimedByInfo'
+      ])
+      .where('inviteCodes.createdBy', '=', user.id)
+      .orderBy('inviteCodes.created', 'asc')
+      .orderBy('inviteCodes.id', 'asc')
+      .execute()
+
+    const available: AvailableInviteCode[] = []
+    const claimed: ClaimedInviteCode[] = []
+    for (const row of rows) {
+      if (row.claimedByUid == null) {
+        available.push({ id: row.id, code: row.code, created: row.created })
+      } else {
+        claimed.push({
+          code: row.code,
+          claimed: row.claimed,
+          claimedByUid: row.claimedByUid,
+          claimedByName: row.claimedByInfo?.fullname ?? row.claimedByUsername ?? row.claimedByUid
+        })
+      }
+    }
+
+    return c.render(InviteCodesPage({ available, claimed }), {
+      title: 'Invites',
+      description: 'Your invite codes and who has used them.',
+      styles: ['user']
+    })
+  })
+
+  user.post('/invite-codes/:id/refresh', async (c) => {
+    const { logger, flash, auth, db } = c.var
+    const user = await auth.getUser()
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+
+    const id = Number.parseInt(c.req.param('id'), 10)
+    if (!Number.isInteger(id)) throw new HTTPException(404, { message: 'Invite code not found' })
+
+    // guarded update: only the owner's own unclaimed codes can be regenerated
+    const updated = await db
+      .updateTable('inviteCodes')
+      .set({ code: inviteCodeUniquey.create() })
+      .where('id', '=', id)
+      .where('createdBy', '=', user.id)
+      .where('claimedBy', 'is', null)
+      .returning('id')
+      .executeTakeFirst()
+
+    if (updated == null) {
+      await flash.addFlash('error', "That invite code can't be refreshed.")
+    } else {
+      logger.info({ uid: user.uid, inviteCodeId: id }, 'Invite code refreshed')
+      await flash.addFlash('success', 'Invite code refreshed.')
+    }
+    return utils.redirect(c, '/user/invite-codes')
   })
 
   user.get('/data', async (c) => {

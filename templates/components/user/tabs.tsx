@@ -1,5 +1,5 @@
 interface UserTabsProps {
-  activeTab: 'my-profile' | 'edit-profile' | 'settings' | 'data'
+  activeTab: 'my-profile' | 'edit-profile' | 'settings' | 'invite-codes' | 'data'
 }
 const UserTabs = ({ activeTab }: UserTabsProps) => {
   return (
@@ -18,6 +18,11 @@ const UserTabs = ({ activeTab }: UserTabsProps) => {
         <li className={`user-tab ${activeTab === 'settings' ? 'active' : ''}`}>
           <a href="/user/settings" aria-current={activeTab === 'settings' ? 'page' : undefined}>
             Settings
+          </a>
+        </li>
+        <li className={`user-tab ${activeTab === 'invite-codes' ? 'active' : ''}`}>
+          <a href="/user/invite-codes" aria-current={activeTab === 'invite-codes' ? 'page' : undefined}>
+            Invites
           </a>
         </li>
         <li className={`user-tab ${activeTab === 'data' ? 'active' : ''}`}>

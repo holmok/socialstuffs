@@ -2,7 +2,8 @@ import type { ColumnType, Generated, Insertable, Selectable, Updateable } from '
 
 export type InviteCodeTable = {
   id: Generated<number>
-  code: ColumnType<string, string, never>
+  // updateable so an owner can refresh an unclaimed code
+  code: ColumnType<string, string, string>
   createdBy: ColumnType<number, number, never>
   claimedBy: ColumnType<number | null, never, number>
   created: ColumnType<Date, never, never>

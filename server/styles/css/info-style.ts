@@ -46,6 +46,12 @@ export default {
     gap: vars.spacingMid,
     marginTop: vars.spacingMain
   },
+  // the invite-code aside under a hero/closing CTA pair
+  '.hero-note': {
+    color: colors.fgMuted,
+    fontSize: vars.fontSizeSmall,
+    marginTop: vars.spacingMid
+  },
   '.cta': {
     ...accentButton,
     display: 'inline-block',

@@ -5,6 +5,7 @@ import pino from 'pino'
 import LoadConfig from '@/config'
 import { __resetRateLimits } from '@/middleware'
 import { createApp } from '@/server'
+import { BACKDOOR_INVITE_CODE, INVITE_CODES_PER_USER } from './invite-helpers'
 
 const config = LoadConfig()
 const logger = pino({ level: 'silent' })
@@ -78,8 +79,12 @@ afterAll(async () => {
   const ids = users.map((u) => u.id)
   if (ids.length > 0) {
     await db.deleteFrom('accountValidationTokens').where('userId', 'in', ids).execute()
+    // favorites created by invite claims (no FK cascade); inviteCodes cascade with the user rows
+    await db.deleteFrom('favorites').where('userId', 'in', ids).execute()
+    await db.deleteFrom('favorites').where('friendId', 'in', ids).execute()
     await db.deleteFrom('users').where('id', 'in', ids).execute()
   }
+  await db.deleteFrom('waitlist').where('email', 'like', `%${suffix}%`).execute()
   emailSpy.mockRestore()
   await db.destroy()
 })
@@ -96,6 +101,7 @@ describe('POST /sign-up', () => {
   test('duplicate email surfaces "Email is already in use."', async () => {
     const existing = await seedUser('dupemail')
     const res = await post('/sign-up', {
+      inviteCode: BACKDOOR_INVITE_CODE,
       username: `newu${suffix}`.slice(0, 15),
       email: existing.email,
       confirmEmail: existing.email,
@@ -115,6 +121,7 @@ describe('POST /sign-up', () => {
     expect(normalizeEmail(alias)).toBe(normalizeEmail(existing.email))
 
     const res = await post('/sign-up', {
+      inviteCode: BACKDOOR_INVITE_CODE,
       username: `ualias${suffix}`.slice(0, 15),
       email: alias,
       confirmEmail: alias,
@@ -135,6 +142,7 @@ describe('POST /sign-up', () => {
     expect(normalizeEmail(alias)).toBe(normalizeEmail(existing.email))
 
     const res = await post('/sign-up', {
+      inviteCode: BACKDOOR_INVITE_CODE,
       username: `ucase${suffix}`.slice(0, 15),
       email: alias,
       confirmEmail: alias,
@@ -152,6 +160,7 @@ describe('POST /sign-up', () => {
     const username = `udupname${suffix}`.slice(0, 15)
     const email = `freshname-${suffix}@example.com`
     const res = await post('/sign-up', {
+      inviteCode: BACKDOOR_INVITE_CODE,
       username,
       email,
       confirmEmail: email,
@@ -167,6 +176,7 @@ describe('POST /sign-up', () => {
     const email = `happy-${suffix}@example.com`
     const before = emailSpy.mock.calls.length
     const res = await post('/sign-up', {
+      inviteCode: BACKDOOR_INVITE_CODE,
       username: `uhappy${suffix}`.slice(0, 15),
       email,
       confirmEmail: email,
@@ -188,6 +198,7 @@ describe('POST /sign-up', () => {
     const email = `nofatal-${suffix}@example.com`
     emailSpy.mockRejectedValueOnce(new Error('postmark down'))
     const res = await post('/sign-up', {
+      inviteCode: BACKDOOR_INVITE_CODE,
       username: `unofatal${suffix}`.slice(0, 15),
       email,
       confirmEmail: email,
@@ -202,6 +213,122 @@ describe('POST /sign-up', () => {
     if (!created) throw new Error('user not created')
     expect(created.status).toBe('pending')
     expect(await tokenCount(created.id)).toBe(1)
+  })
+})
+
+describe('POST /sign-up invite codes', () => {
+  function signUpFields(name: string, inviteCode: string) {
+    const email = `${name}-${suffix}@example.com`
+    return {
+      inviteCode,
+      username: `u${name}${suffix}`.slice(0, 15),
+      email,
+      confirmEmail: email,
+      password: VALID_PASSWORD,
+      confirmPassword: VALID_PASSWORD
+    }
+  }
+
+  test('missing invite code re-renders the form with an error and creates no user', async () => {
+    const fields = signUpFields('noinvite', '')
+    const res = await post('/sign-up', fields)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('Invite code is required.')
+    expect(await userByEmail(fields.email)).toBeUndefined()
+  })
+
+  test('unknown invite code re-renders the form with an error and creates no user', async () => {
+    const fields = signUpFields('badinvite', `NOPE${suffix}`.toUpperCase())
+    const res = await post('/sign-up', fields)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('That invite code is not valid or has already been used.')
+    expect(await userByEmail(fields.email)).toBeUndefined()
+  })
+
+  test('backdoor sign-up seeds the new user with fresh invite codes', async () => {
+    const fields = signUpFields('backdoor', BACKDOOR_INVITE_CODE)
+    const res = await post('/sign-up', fields)
+    expect(res.status).toBe(303)
+
+    const created = await userByEmail(fields.email)
+    expect(created).toBeDefined()
+    if (!created) throw new Error('user not created')
+    const codes = await db.selectFrom('inviteCodes').where('createdBy', '=', created.id).select(['code', 'claimedBy']).execute()
+    expect(codes.length).toBe(INVITE_CODES_PER_USER)
+    expect(codes.every((row) => row.claimedBy === null)).toBe(true)
+    // 24 chars from the consonant-only alphabet
+    expect(codes.every((row) => /^[QWRTPSDFGHJKLZXCVBNM]{24}$/.test(row.code))).toBe(true)
+  })
+
+  test("another user's invite code is claimed and the inviter becomes a favorite", async () => {
+    const inviter = await seedUser('inviter')
+    const code = `WLINVITE${suffix}`.toUpperCase()
+    await db.insertInto('inviteCodes').values({ code, createdBy: inviter.id }).execute()
+
+    const fields = signUpFields('invited', code)
+    const res = await post('/sign-up', fields)
+    expect(res.status).toBe(303)
+
+    const created = await userByEmail(fields.email)
+    expect(created).toBeDefined()
+    if (!created) throw new Error('user not created')
+
+    const claimed = await db
+      .selectFrom('inviteCodes')
+      .where('code', '=', code)
+      .select(['claimedBy', 'claimed'])
+      .executeTakeFirstOrThrow()
+    expect(claimed.claimedBy).toBe(created.id)
+    expect(claimed.claimed).not.toBeNull()
+
+    const favorite = await db
+      .selectFrom('favorites')
+      .where('userId', '=', created.id)
+      .where('friendId', '=', inviter.id)
+      .select(['id'])
+      .executeTakeFirst()
+    expect(favorite).toBeDefined()
+
+    // single-use: reusing the claimed code fails and creates no second account
+    const reuse = signUpFields('reuse', code)
+    const res2 = await post('/sign-up', reuse)
+    expect(res2.status).toBe(200)
+    expect(await res2.text()).toContain('That invite code is not valid or has already been used.')
+    expect(await userByEmail(reuse.email)).toBeUndefined()
+  })
+
+  test('a waitlist invite code is claimed on sign-up without adding a favorite', async () => {
+    const code = `WLCODE${suffix}`.toUpperCase()
+    await db
+      .insertInto('waitlist')
+      .values({ email: `wl-${suffix}@example.com` })
+      .execute()
+    await db.updateTable('waitlist').set({ code, sent: new Date() }).where('email', '=', `wl-${suffix}@example.com`).execute()
+
+    const fields = signUpFields('fromwl', code)
+    const res = await post('/sign-up', fields)
+    expect(res.status).toBe(303)
+
+    const created = await userByEmail(fields.email)
+    expect(created).toBeDefined()
+    if (!created) throw new Error('user not created')
+
+    const claimed = await db
+      .selectFrom('waitlist')
+      .where('code', '=', code)
+      .select(['claimedBy', 'claimed'])
+      .executeTakeFirstOrThrow()
+    expect(claimed.claimedBy).toBe(created.id)
+    expect(claimed.claimed).not.toBeNull()
+
+    const favorites = await db.selectFrom('favorites').where('userId', '=', created.id).select(['id']).execute()
+    expect(favorites.length).toBe(0)
+
+    // single-use: reusing the claimed waitlist code fails
+    const reuse = signUpFields('wlreuse', code)
+    const res2 = await post('/sign-up', reuse)
+    expect(res2.status).toBe(200)
+    expect(await res2.text()).toContain('That invite code is not valid or has already been used.')
   })
 })
 
