@@ -1,7 +1,8 @@
-import WaitlistForm, { type WaitlistFormProps } from '@templates/components/waitlist-form'
+import WaitlistForm, { type WaitlistFormProps, WaitlistThanks } from '@templates/components/waitlist-form'
 
-// form props flow through so no-JS error re-renders of the full page keep the typed values
-const WaitlistPage = (props: WaitlistFormProps = {}) => {
+// form props flow through so no-JS error re-renders of the full page keep the typed values;
+// joined renders the post-submit thank-you in place of the form (no-JS lands on /waitlist?joined=1)
+const WaitlistPage = ({ joined = false, ...props }: WaitlistFormProps & { joined?: boolean } = {}) => {
   return (
     <>
       <h1 className="form-heading">Join the Waitlist</h1>
@@ -10,7 +11,7 @@ const WaitlistPage = (props: WaitlistFormProps = {}) => {
         new people, we'll email you an invite code — keep an eye on your inbox, and use the code on the sign-up page to create
         your account.
       </p>
-      <WaitlistForm {...props} />
+      {joined ? <WaitlistThanks /> : <WaitlistForm {...props} />}
     </>
   )
 }

@@ -50,11 +50,11 @@ describe('GET /waitlist', () => {
 })
 
 describe('POST /waitlist', () => {
-  test('valid email joins the waitlist and redirects', async () => {
+  test('valid email joins the waitlist and redirects to the thank-you variant', async () => {
     const email = `join-${suffix}@example.com`
     const res = await post('/waitlist', { email })
     expect(res.status).toBe(303)
-    expect(res.headers.get('location')).toBe('/waitlist')
+    expect(res.headers.get('location')).toBe('/waitlist?joined=1')
 
     const rows = await waitlistRows(email)
     expect(rows.length).toBe(1)
@@ -68,6 +68,7 @@ describe('POST /waitlist', () => {
     await post('/waitlist', { email })
     const res = await post('/waitlist', { email })
     expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/waitlist?joined=1')
     expect((await waitlistRows(email)).length).toBe(1)
   })
 
@@ -77,6 +78,34 @@ describe('POST /waitlist', () => {
     const res = await post('/waitlist', { email })
     expect(res.status).toBe(303)
     expect((await waitlistRows(email)).length).toBe(1)
+  })
+
+  test('an HTMX submit swaps the form for the thank-you fragment in place', async () => {
+    ipCounter += 1
+    const email = `htmx-${suffix}@example.com`
+    const res = await app.request('http://localhost/waitlist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: 'http://localhost',
+        'X-Forwarded-For': `10.7.1.${ipCounter}`,
+        'HX-Request': 'true'
+      },
+      body: new URLSearchParams({ email }).toString()
+    })
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Thank you!')
+    expect(body).not.toContain('hx-post="/waitlist"')
+    expect((await waitlistRows(email)).length).toBe(1)
+  })
+
+  test('the joined variant of the page shows the thank-you instead of the form', async () => {
+    const res = await app.request('http://localhost/waitlist?joined=1')
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('Thank you!')
+    expect(body).not.toContain('hx-post="/waitlist"')
   })
 
   test('invalid email re-renders the form with an error', async () => {

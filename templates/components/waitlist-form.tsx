@@ -5,6 +5,20 @@ export type WaitlistFormProps = {
   errors?: Record<string, string[]>
 }
 
+// swapped in place of the form after a successful join (HTMX outerHTML swap and the
+// no-JS ?joined=1 page render both use it); identical for new and already-listed emails
+export const WaitlistThanks = () => {
+  return (
+    <div className="form waitlist-thanks" role="status">
+      <h2>Thank you!</h2>
+      <p>You're on the list. As we're ready to add new people, we'll email you an invite code — keep an eye on your inbox.</p>
+      <p className="form-alt">
+        Already have an invite code? <a href="/sign-up">Sign Up</a>
+      </p>
+    </div>
+  )
+}
+
 const WaitlistForm = (props: WaitlistFormProps) => {
   return (
     <form

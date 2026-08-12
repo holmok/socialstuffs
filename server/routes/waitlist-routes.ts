@@ -1,5 +1,5 @@
 import WaitlistPage from '@pages/waitlist'
-import WaitlistForm, { type WaitlistFormProps } from '@templates/components/waitlist-form'
+import WaitlistForm, { type WaitlistFormProps, WaitlistThanks } from '@templates/components/waitlist-form'
 import type { Context, Hono } from 'hono'
 import type { Logger } from 'pino'
 import { z } from 'zod'
@@ -27,7 +27,8 @@ export default function WaitlistRoutes(app: Hono, logger: Logger) {
   logger.info('Registering waitlist routes')
 
   app.get('/waitlist', (c) => {
-    return c.render(WaitlistPage(), pageMeta)
+    // ?joined=1 is the no-JS landing after a successful join: thank-you in place of the form
+    return c.render(WaitlistPage({ joined: c.req.query('joined') != null }), pageMeta)
   })
 
   const joinLimit = m.rateLimit({
@@ -42,7 +43,7 @@ export default function WaitlistRoutes(app: Hono, logger: Logger) {
   })
 
   app.post('/waitlist', joinLimit, async (c) => {
-    const { db, logger, flash } = c.var
+    const { db, logger } = c.var
     const form = await utils.formStrings(c)
     const result = utils.validateFormData<WaitlistData>(form, waitlistSchema)
 
@@ -61,7 +62,9 @@ export default function WaitlistRoutes(app: Hono, logger: Logger) {
       .execute()
 
     logger.info('Waitlist signup recorded')
-    await flash.addFlash('success', "You're on the list! We'll email you an invite code as soon as we have room.")
-    return utils.redirect(c, '/waitlist')
+    // the thank-you replaces the form: HTMX swaps it in place (the form targets itself with
+    // outerHTML), no-JS gets the PRG redirect to the joined variant of the page
+    if (c.req.header('HX-Request') === 'true') return c.html(WaitlistThanks())
+    return utils.redirect(c, '/waitlist?joined=1')
   })
 }

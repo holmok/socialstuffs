@@ -8,6 +8,13 @@ export default {
   'h1.form-heading': {
     textAlign: 'center'
   },
+  // the post-join thank-you that replaces the waitlist form (reuses the .form card surface)
+  '.waitlist-thanks': {
+    textAlign: 'center',
+    h2: {
+      marginBottom: vars.spacingSmall
+    }
+  },
   // lead-in copy above a form card (e.g. the waitlist pitch), aligned to the card's width
   '.form-intro': {
     maxWidth: vars.maxWidthForm,
