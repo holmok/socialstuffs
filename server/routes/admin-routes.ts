@@ -9,6 +9,12 @@ import { inviteCodeUniquey } from './invite-helpers'
 
 const WAITLIST_PER_PAGE = 25
 
+// the seed script (scripts/seed-fake-data.ts) fills the waitlist with @example.com addresses;
+// never hand those to Postmark — rows still update normally so seeded data flows through the states
+function isSeededEmail(email: string) {
+  return email.toLowerCase().endsWith('@example.com')
+}
+
 // checked ids from the waitlist table form; tolerates a missing/unparseable body
 async function selectedIds(c: Context): Promise<number[]> {
   try {
@@ -173,6 +179,12 @@ export default function AdminRoutes(app: Hono, logger: Logger) {
         .executeTakeFirst()
       if (row == null) continue
 
+      if (isSeededEmail(row.email)) {
+        logger.info('Skipping invite email for seeded @example.com address')
+        sent += 1
+        continue
+      }
+
       // deliberate catch: the invite row is already updated, so a failed send is non-fatal — the
       // invite shows up under Unclaimed Invites where it can be revoked (returning them to the list)
       try {
@@ -250,6 +262,11 @@ export default function AdminRoutes(app: Hono, logger: Logger) {
         .executeTakeFirst()
       if (row == null) continue
       revoked += 1
+
+      if (isSeededEmail(row.email)) {
+        logger.info('Skipping revoke email for seeded @example.com address')
+        continue
+      }
 
       // deliberate catch: the code is already disabled; the courtesy email failing is log-only
       try {

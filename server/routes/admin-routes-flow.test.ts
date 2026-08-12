@@ -90,10 +90,12 @@ async function signIn(user: SeededUser): Promise<string> {
   return cookie.split(';')[0]
 }
 
-async function seedWaitlist(name: string) {
+// @example.org by default — admin invite/revoke emails are skipped for @example.com (seed-script
+// addresses), so tests asserting a send need a domain outside that filter
+async function seedWaitlist(name: string, domain = 'example.org') {
   return await db
     .insertInto('waitlist')
-    .values({ email: `${name}-${suffix}@example.com` })
+    .values({ email: `${name}-${suffix}@${domain}` })
     .returning(['id', 'email'])
     .executeTakeFirstOrThrow()
 }
@@ -177,6 +179,19 @@ describe('/admin/waitlist', () => {
     expect(String(call.data?.url)).toContain(`/sign-up?code=${row.code}`)
   })
 
+  test('send to a seeded @example.com entry sets code+sent but skips the email', async () => {
+    const entry = await seedWaitlist('seededsend', 'example.com')
+    const before = emailSpy.mock.calls.length
+
+    const res = await postIds('/admin/waitlist/send', [entry.id], adminCookie)
+    expect(res.status).toBe(303)
+
+    const row = await waitlistById(entry.id)
+    expect(row.code).not.toBeNull()
+    expect(row.sent).not.toBeNull()
+    expect(emailSpy.mock.calls.length).toBe(before)
+  })
+
   test('sending again for an already-invited row is a no-op', async () => {
     const entry = await seedWaitlist('resendme')
     await postIds('/admin/waitlist/send', [entry.id], adminCookie)
@@ -213,6 +228,20 @@ describe('/admin/waitlist-unclaimed', () => {
     const call = emailSpy.mock.calls[before][0]
     expect(call.to).toBe(entry.email)
     expect(call.template).toBe('waitlist-revoke-email')
+  })
+
+  test('revoking a seeded @example.com invite clears the row but skips the email', async () => {
+    const entry = await seedWaitlist('seededrevoke', 'example.com')
+    await postIds('/admin/waitlist/send', [entry.id], adminCookie)
+    const before = emailSpy.mock.calls.length
+
+    const res = await postIds('/admin/waitlist-unclaimed/revoke', [entry.id], adminCookie)
+    expect(res.status).toBe(303)
+
+    const row = await waitlistById(entry.id)
+    expect(row.code).toBeNull()
+    expect(row.sent).toBeNull()
+    expect(emailSpy.mock.calls.length).toBe(before)
   })
 
   test('a claimed invite cannot be revoked', async () => {
