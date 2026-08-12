@@ -5,6 +5,9 @@ export type WaitlistTable = {
   email: ColumnType<string, string, never>
   created: ColumnType<Date, never, never>
   sent: ColumnType<Date | null, never, Date>
+  code: ColumnType<string | null, never, string>
+  claimed: ColumnType<Date | null, never, Date>
+  claimed_by: ColumnType<number | null, never, number>
 }
 
 export type WaitlistData = Selectable<WaitlistTable>
