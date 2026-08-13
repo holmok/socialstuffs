@@ -68,7 +68,7 @@ jobs:
 
       - name: Tests with coverage
         shell: bash
-        run: bun run test:coverage 2>&1 | tee test-output.txt
+        run: bun run test:ci
 
       - name: Coverage report
         if: always()
