@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: socialstuffs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/socialstuffs
+      DATABASE_SCHEMA: socialstuffs
+      PORT: '3000'
+      HOST: localhost
+      NODE_ENV: test
+      # the flow tests simulate per-request client IPs via X-Forwarded-For
+      TRUST_PROXY: 'true'
+      LOG_NAME: socialstuffs-ci
+      # external services are stubbed in tests; these just satisfy config validation
+      AXIOM_DATASET: ci-unused
+      AXIOM_TOKEN: ci-unused
+      POSTMARK_TOKEN: ci-unused
+      FROM_EMAIL: no-reply@example.com
+      BASE_LINK_URL: http://localhost:3000
+      IMAGE_BUCKET: ci-unused
+      BASE_IMAGE_URL: https://storage.googleapis.com/ci-unused
+      JWT_SECRET: ci-only-jwt-secret-never-used-outside-ci
+      COOKIE_SECRET: ci-only-cookie-secret-never-used-outside-ci
+      COOKIE_NAME_USER: ss_user
+      COOKIE_NAME_SESSION: ss_session
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint and format check
+        run: bun run check
+
+      - name: Type check
+        run: bun run typecheck
+
+      - name: Run migrations
+        run: bun run migrate up
+
+      - name: Tests with coverage
+        shell: bash
+        run: bun run test:coverage 2>&1 | tee test-output.txt
+
+      - name: Coverage report
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f test-output.txt ]; then
+            echo 'Tests did not run — no coverage to report.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo '## Test coverage'
+            echo ''
+            echo '```'
+            # the coverage table is bounded by its dashed separator lines
+            awk '{ buf[NR] = $0; if ($0 ~ /^-+\|/) { if (!start) start = NR; end = NR } }
+                 END { if (start) for (i = start; i <= end; i++) print buf[i]; else print "No coverage table found in test output." }' test-output.txt
+            echo '```'
+            echo ''
+            # the pass/fail tallies from the end of the run
+            grep -E '^[[:space:]]*[0-9]+ (pass|fail|skip)|^Ran [0-9]+ tests' test-output.txt || true
+          } >> "$GITHUB_STEP_SUMMARY"
