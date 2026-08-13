@@ -8,7 +8,6 @@
     "test": "bun test",
     "migrate": "node-pg-migrate --decamelize --schema=socialstuffs --create-schema -j ts -m migrations",
     "test:coverage": "bun test --coverage",
-    "test:ci": "bun test --concurrent --coverage 2>&1 | tee test-output.txt",
     "ngrok": "concurrently \"bun run start\" \"ngrok http 3000 --url ngrok.holmok.com\""
   },
   "dependencies": {
