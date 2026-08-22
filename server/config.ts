@@ -11,7 +11,7 @@ export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   LOG_NAME: z.string().min(1),
-  DATABASE_URL: z.url(),
+  DATABASE_URL: z.string().min(1),
   DATABASE_SCHEMA: z.string().min(1),
   DATABASE_MAX_CLIENTS: z.coerce.number().int().positive().default(10),
   DATABASE_MIN_CLIENTS: z.coerce.number().int().nonnegative().default(1),

@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+.agents
+.env
+.DS_Store
+node_modules
+coverage
+docs
+Dockerfile
+push-image.sh

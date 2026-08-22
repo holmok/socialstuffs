@@ -42,7 +42,9 @@ export function createApp(config: Config, logger: Logger) {
     secureHeaders({
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        // Cloudflare Web Analytics: the proxy injects the beacon script, which then posts metrics to cloudflareinsights.com
+        scriptSrc: ["'self'", 'https://static.cloudflareinsights.com'],
+        connectSrc: ["'self'", 'https://cloudflareinsights.com'],
         styleSrc: ["'self'", "'unsafe-inline'"],
         // the image bucket origin for stored profile photos; blob: for the client-side upload preview
         imgSrc: ["'self'", 'data:', 'blob:', new URL(config.baseImageUrl).origin],
