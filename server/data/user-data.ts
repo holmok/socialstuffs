@@ -1,8 +1,15 @@
 import type { ColumnType, Generated, Insertable, Selectable, Updateable } from 'kysely'
+import type { PostTargetType } from './post-target-data'
 
 export type UserStatus = 'pending' | 'active' | 'deleted' | 'inactive'
 export type UserRole = 'user' | 'admin' | 'owner'
 export type UserMeta = Record<string, unknown>
+
+// shape of the settings stored in the users.preferences JSON column
+export type UserPreferences = {
+  // last audience the user picked on a post create/edit; the new-post form defaults to it
+  defaultAudience?: PostTargetType
+}
 
 // shape of the profile fields stored in the users.info JSON column
 export type UserProfileInfo = {
@@ -28,7 +35,8 @@ export type UserTable = {
   role: ColumnType<UserRole, never, UserRole>
   // the open-record intersection keeps unknown keys (present in older rows) surviving round-trips
   info: ColumnType<UserProfileInfo & UserMeta, never, UserProfileInfo & UserMeta>
-  preferences: ColumnType<UserMeta, never, UserMeta>
+  // same open-record intersection as info, for the same reason
+  preferences: ColumnType<UserPreferences & UserMeta, never, UserPreferences & UserMeta>
   lastLogin: ColumnType<Date | null, never, Date>
 }
 

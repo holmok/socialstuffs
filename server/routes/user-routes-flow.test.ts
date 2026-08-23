@@ -31,6 +31,8 @@ const uploadSpy = spyOn(ImagesAPI.prototype, 'uploadImage').mockResolvedValue(UP
 const EXPORT_URL = 'https://img.example.com/user_data/dt=2026-08-09/test_data.zip'
 const exportSpy = spyOn(UserDataAPI.prototype, 'downloadUserData').mockResolvedValue(EXPORT_URL)
 const deleteSpy = spyOn(UserDataAPI.prototype, 'deleteUserData').mockResolvedValue(undefined)
+// null (= not found) by default; the happy-path test overrides with mockResolvedValueOnce
+const downloadSpy = spyOn(UserDataAPI.prototype, 'getExportStream').mockResolvedValue(null)
 
 type SeededUser = { id: number; uid: string; email: string; username: string }
 
@@ -130,6 +132,7 @@ beforeEach(() => {
   uploadSpy.mockClear()
   exportSpy.mockClear()
   deleteSpy.mockClear()
+  downloadSpy.mockClear()
 })
 
 afterAll(async () => {
@@ -145,6 +148,7 @@ afterAll(async () => {
   uploadSpy.mockRestore()
   exportSpy.mockRestore()
   deleteSpy.mockRestore()
+  downloadSpy.mockRestore()
   await db.destroy()
 })
 
@@ -672,6 +676,67 @@ describe('GET /user/data', () => {
     expect(body).toContain(`href="${EXPORT_URL}"`)
     // the date is derived from the dt= segment of the stored URL, as plain text after the link
     expect(body).toContain('</a> created on 08/09/2026')
+  })
+})
+
+describe('GET /user/data/user_data/:dt/:file (export download)', () => {
+  const DT = 'dt=2026-08-09'
+
+  test("streams the user's own export with download headers", async () => {
+    const user = await seedUser('ddl')
+    const cookie = await signIn(user)
+    downloadSpy.mockResolvedValueOnce({
+      stream: new Response('zip-bytes').body as ReadableStream<Uint8Array>,
+      size: 9
+    })
+
+    const res = await get(`/user/data/user_data/${DT}/token123_${user.uid}_data.zip`, cookie)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/zip')
+    expect(res.headers.get('content-length')).toBe('9')
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="socialstuffs-data-2026-08-09.zip"')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(await res.text()).toBe('zip-bytes')
+    expect(downloadSpy.mock.calls).toEqual([[user.uid, `user_data/${DT}/token123_${user.uid}_data.zip`]])
+  })
+
+  test("404s a filename carrying another user's uid without touching storage", async () => {
+    const user = await seedUser('ddla')
+    const other = await seedUser('ddlb')
+    const cookie = await signIn(user)
+
+    const res = await get(`/user/data/user_data/${DT}/token123_${other.uid}_data.zip`, cookie)
+    expect(res.status).toBe(404)
+    expect(downloadSpy.mock.calls.length).toBe(0)
+  })
+
+  test('404s malformed date and filename segments without touching storage', async () => {
+    const user = await seedUser('ddlm')
+    const cookie = await signIn(user)
+
+    const badDt = await get(`/user/data/user_data/dt=20260809/token123_${user.uid}_data.zip`, cookie)
+    expect(badDt.status).toBe(404)
+    // %2e%2e = `..` — decoded traversal characters must not reach the storage path
+    const traversal = await get(`/user/data/user_data/${DT}/%2e%2e_${user.uid}_data.zip`, cookie)
+    expect(traversal.status).toBe(404)
+    expect(downloadSpy.mock.calls.length).toBe(0)
+  })
+
+  test('404s when the object is gone from the bucket', async () => {
+    const user = await seedUser('ddlg')
+    const cookie = await signIn(user)
+
+    // default stub resolves null (not found / not yours)
+    const res = await get(`/user/data/user_data/${DT}/token123_${user.uid}_data.zip`, cookie)
+    expect(res.status).toBe(404)
+    expect(downloadSpy.mock.calls.length).toBe(1)
+  })
+
+  test('redirects to sign-in when not authenticated', async () => {
+    const res = await get(`/user/data/user_data/${DT}/token123_someuid_data.zip`)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toContain('/sign-in')
+    expect(downloadSpy.mock.calls.length).toBe(0)
   })
 })
 

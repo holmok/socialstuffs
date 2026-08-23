@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import type data from '@data/index'
 import { Storage } from '@google-cloud/storage'
 import * as DateFns from 'date-fns'
@@ -7,9 +8,9 @@ import Uniquey from 'uniquey'
 import type { Config } from '@/config'
 import { logError } from '@/utils'
 
-// the bucket is public-read, so export URLs are capability URLs: the random token is the
-// only thing keeping another user's archive undownloadable. Never build the path from
-// public identifiers alone (the old uid+date scheme was enumerable).
+// the bucket is private — archives are served through the authenticated /user/data download
+// route. The random token still keeps the object path unguessable (legacy public zips with
+// the old predictable uid+date path may linger until the daily-export cleanup removes them).
 const exportUniquey = new Uniquey({ length: 32 })
 
 // matches this user's export objects in both the current tokened format
@@ -34,8 +35,9 @@ const IMAGE_DOWNLOAD_CONCURRENCY = 4
 export default class UserDataAPI {
   private readonly logger: Logger
   private readonly storage: Storage
+  private readonly dataBucket: string
   private readonly imageBucket: string
-  private readonly baseImageUrl: string
+  private readonly baseUrl: string
 
   constructor(
     private readonly db: ReturnType<typeof data>,
@@ -44,10 +46,9 @@ export default class UserDataAPI {
   ) {
     this.logger = _logger.child({ module: 'user-data-api' })
     this.storage = new Storage()
-    this.imageBucket = config.imageBucket
-    // new URL(path, base) replaces the last segment of a base without a trailing slash,
-    // which would silently drop the bucket path from returned URLs
-    this.baseImageUrl = config.baseImageUrl.endsWith('/') ? config.baseImageUrl : `${config.baseImageUrl}/`
+    this.dataBucket = config.buckets.data
+    this.imageBucket = config.buckets.image
+    this.baseUrl = config.baseLinkUrl.endsWith('/') ? config.baseLinkUrl : `${config.baseLinkUrl}/`
     this.logger.info('UserDataAPI initialized')
   }
 
@@ -59,7 +60,7 @@ export default class UserDataAPI {
 
       const dateStamp = DateFns.format(new Date(), 'yyyy-MM-dd')
       const zipPath = `user_data/dt=${dateStamp}/${exportUniquey.create()}_${userUid}_data.zip`
-      const bucket = this.storage.bucket(this.imageBucket)
+      const bucket = this.storage.bucket(this.dataBucket)
       const zipFile = bucket.file(zipPath)
 
       // one listing serves the once-a-day check and the cleanup of older exports (including
@@ -111,8 +112,9 @@ export default class UserDataAPI {
         'posts.ndjson': strToU8(posts.map((post) => JSON.stringify(post)).join('\n')),
         'comments.ndjson': strToU8(comments.map((comment) => JSON.stringify(comment)).join('\n'))
       }
+      // uploaded images live in the image bucket (see ImagesAPI), not the data bucket
       const imagePrefix = `${userUid}/`
-      const [imageFiles] = await bucket.getFiles({ prefix: imagePrefix })
+      const [imageFiles] = await this.storage.bucket(this.imageBucket).getFiles({ prefix: imagePrefix })
       // bounded concurrency: download in chunks of IMAGE_DOWNLOAD_CONCURRENCY
       for (let i = 0; i < imageFiles.length; i += IMAGE_DOWNLOAD_CONCURRENCY) {
         await Promise.all(
@@ -133,11 +135,29 @@ export default class UserDataAPI {
         { userUid, zipPath, posts: posts.length, comments: comments.length, images: imageFiles.length },
         'User data exported'
       )
-      return new URL(zipPath, this.baseImageUrl).href
+      return new URL(`user/data/${zipPath}`, this.baseUrl).href
     } catch (error) {
       if (error instanceof UserDataError) throw error
       logError(this.logger, error, 'Error exporting user data')
       throw new Error('An unexpected error occurred while exporting user data.')
+    }
+  }
+
+  // streams a stored export for the download route. Returns null when the object doesn't
+  // exist or isn't this user's — the route 404s both identically (no existence leak)
+  async getExportStream(userUid: string, zipPath: string) {
+    if (!isExportFor(zipPath, userUid)) return null
+    try {
+      const file = this.storage.bucket(this.dataBucket).file(zipPath)
+      const [metadata] = await file.getMetadata()
+      return {
+        stream: Readable.toWeb(file.createReadStream()) as ReadableStream<Uint8Array>,
+        size: Number(metadata.size)
+      }
+    } catch (error) {
+      if ((error as { code?: number }).code === 404) return null
+      logError(this.logger, error, 'Error streaming user data export')
+      throw new Error('An unexpected error occurred while downloading user data.')
     }
   }
 
@@ -175,11 +195,13 @@ export default class UserDataAPI {
       })
 
       // GCS can't join the transaction, so images go after the DB commit: the user's
-      // uploaded images plus any data-export zips (they contain everything above)
-      const bucket = this.storage.bucket(this.imageBucket)
-      await bucket.deleteFiles({ prefix: `${userUid}/`, force: true })
+      // uploaded images (image bucket) plus any data-export zips (data bucket — they
+      // contain everything above)
+      await this.storage.bucket(this.imageBucket).deleteFiles({ prefix: `${userUid}/`, force: true })
       // `*` may be empty, so this matches both the tokened and legacy export filenames
-      await bucket.deleteFiles({ prefix: 'user_data/', matchGlob: `user_data/dt=*/*${userUid}_data.zip`, force: true })
+      await this.storage
+        .bucket(this.dataBucket)
+        .deleteFiles({ prefix: 'user_data/', matchGlob: `user_data/dt=*/*${userUid}_data.zip`, force: true })
       this.logger.info({ userUid }, 'User data deleted')
     } catch (error) {
       if (error instanceof UserDataError) throw error

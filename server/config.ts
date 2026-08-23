@@ -25,7 +25,9 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(1),
   COOKIE_SECRET: z.string().min(1),
   COOKIE_NAME_USER: z.string().min(1),
-  COOKIE_NAME_SESSION: z.string().min(1)
+  COOKIE_NAME_SESSION: z.string().min(1),
+  DATA_BUCKET: z.string().min(1),
+  STATIC_BUCKET: z.string().min(1)
 })
 
 const languageThresholds = {
@@ -128,7 +130,11 @@ export default function LoadConfig() {
     },
     baseLinkUrl: env.BASE_LINK_URL,
     baseImageUrl: env.BASE_IMAGE_URL,
-    imageBucket: env.IMAGE_BUCKET,
+    buckets: {
+      image: env.IMAGE_BUCKET,
+      data: env.DATA_BUCKET,
+      static: env.STATIC_BUCKET
+    },
     email: {
       postmarkToken: env.POSTMARK_TOKEN,
       fromEmail: env.FROM_EMAIL

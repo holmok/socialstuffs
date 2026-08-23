@@ -8,6 +8,7 @@ import PublicRoutes from './public-routes'
 import RecoverPasswordRoutes from './recover-password-routes'
 import SignInRoutes from './sign-in-routes'
 import SignUpRoutes from './sign-up-routes'
+import SystemRoutes from './system-routes'
 import UserRoutes from './user-routes'
 import WaitlistRoutes from './waitlist-routes'
 
@@ -22,5 +23,6 @@ export default function Routes(app: Hono, logger: Logger) {
   PostRoutes(app, logger)
   DiscoverRoutes(app, logger)
   UserRoutes(app, logger)
+  SystemRoutes(app, logger)
   AdminRoutes(app, logger)
 }

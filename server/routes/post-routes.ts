@@ -151,7 +151,9 @@ export default function PostRoutes(app: Hono, logger: Logger) {
   posts.use('*', m.authorize({ requireAuth: true }))
 
   posts.get('/new', async (c) => {
-    return c.render(NewPostPage(), {
+    const user = await c.var.auth.getUser()
+    if (user == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+    return c.render(NewPostPage({ audience: user.preferences.defaultAudience }), {
       title: 'New Post',
       description: 'Create a new post.',
       styles: ['auth']
@@ -203,6 +205,15 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         .insertInto('postTargets')
         .values({ postId: post.id, postUid: post.uid, userId: user.id, userUid: user.uid, type: data.audience })
         .execute()
+      // remember the chosen audience so the new-post form defaults to it next time
+      // (copy before mutating: getUserRow memoizes the row per request)
+      if (user.preferences.defaultAudience !== data.audience) {
+        await trx
+          .updateTable('users')
+          .set({ preferences: { ...user.preferences, defaultAudience: data.audience } })
+          .where('id', '=', user.id)
+          .execute()
+      }
     })
 
     logger.info({ uid: user.uid, postUid, status: data.status, audience: data.audience }, 'Post created')
@@ -300,6 +311,15 @@ export default function PostRoutes(app: Hono, logger: Logger) {
         await trx
           .insertInto('postTargets')
           .values({ postId: post.id, postUid: post.uid, userId: user.id, userUid: user.uid, type: data.audience })
+          .execute()
+      }
+      // remember the chosen audience so the new-post form defaults to it next time
+      // (copy before mutating: getUserRow memoizes the row per request)
+      if (user.preferences.defaultAudience !== data.audience) {
+        await trx
+          .updateTable('users')
+          .set({ preferences: { ...user.preferences, defaultAudience: data.audience } })
+          .where('id', '=', user.id)
           .execute()
       }
     })

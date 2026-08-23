@@ -637,3 +637,56 @@ describe('New Post link on the profile page', () => {
     expect(theirs).not.toContain('class="profile-new-post-link"')
   })
 })
+
+describe('audience preference', () => {
+  async function defaultAudienceFor(userId: number) {
+    const row = await db.selectFrom('users').select('preferences').where('id', '=', userId).executeTakeFirstOrThrow()
+    return row.preferences.defaultAudience
+  }
+
+  test('creating a post saves its audience as the user default, and the new-post form pre-selects it', async () => {
+    const user = await seedUser('pfnew')
+    const cookie = await signIn(user)
+
+    await createPost(cookie, user.id, { audience: 'favorites' })
+    expect(await defaultAudienceFor(user.id)).toBe('favorites')
+
+    const body = await (await get('/posts/new', cookie)).text()
+    expect(body).toContain('<option value="favorites" selected="">')
+    expect(body).not.toContain('<option value="all" selected="">')
+  })
+
+  test('a draft save also updates the default audience', async () => {
+    const user = await seedUser('pfdft')
+    const cookie = await signIn(user)
+    await createPost(cookie, user.id, { status: 'draft', audience: 'approved' })
+    expect(await defaultAudienceFor(user.id)).toBe('approved')
+  })
+
+  test('editing a post updates the default audience without clobbering other preference keys', async () => {
+    const user = await seedUser('pfedt')
+    // an unrelated pre-existing key must survive the merge write
+    await db
+      .updateTable('users')
+      .set({ preferences: { unrelated: 'kept' } })
+      .where('id', '=', user.id)
+      .execute()
+    const cookie = await signIn(user)
+    const post = await createPost(cookie, user.id, { audience: 'all' })
+    expect(await defaultAudienceFor(user.id)).toBe('all')
+
+    const res = await postMultipart(`/posts/${post.uid}/edit`, postFields({ audience: 'non_disapproved' }), cookie)
+    expect(res.status).toBe(303)
+    expect(await defaultAudienceFor(user.id)).toBe('non_disapproved')
+
+    const row = await db.selectFrom('users').select('preferences').where('id', '=', user.id).executeTakeFirstOrThrow()
+    expect(row.preferences.unrelated).toBe('kept')
+  })
+
+  test('a user with no saved preference still gets the stock default of all', async () => {
+    const user = await seedUser('pfdef')
+    const cookie = await signIn(user)
+    const body = await (await get('/posts/new', cookie)).text()
+    expect(body).toContain('<option value="all" selected="">')
+  })
+})

@@ -16,40 +16,43 @@ const db = data(config.poolConfig, config.dbSchema, logger)
 
 const suffix = Math.random().toString(36).slice(2, 10)
 
-// fake GCS bucket: records saves/deletes instead of talking to Google; getFiles honors the
-// prefix so the export listing (user_data/) and the image listing (<uid>/) stay distinct
-let savedZips: { path: string; data: Buffer }[] = []
-let bucketFiles: { name: string; contents: Buffer }[] = []
+// fake GCS keyed by bucket name: records saves/deletes instead of talking to Google. Export
+// zips live in the data bucket and uploaded images in the image bucket, so each operation
+// must ask for the right bucket to see its files; getFiles also honors the prefix
+let savedZips: { bucket: string; path: string; data: Buffer }[] = []
+let filesByBucket: Record<string, { name: string; contents: Buffer }[]> = {}
 let deletedFiles: string[] = []
-let deleteFilesCalls: Record<string, unknown>[] = []
+let deleteFilesCalls: { bucket: string; opts: Record<string, unknown> }[] = []
 let getFilesError: Error | undefined
 
-const fakeBucket = {
-  file: (path: string) => ({
-    save: async (buffer: Buffer) => {
-      savedZips.push({ path, data: buffer })
+function fakeBucket(bucketName: string) {
+  return {
+    file: (path: string) => ({
+      save: async (buffer: Buffer) => {
+        savedZips.push({ bucket: bucketName, path, data: buffer })
+      }
+    }),
+    getFiles: async (opts: { prefix: string }) => {
+      if (getFilesError) throw getFilesError
+      return [
+        (filesByBucket[bucketName] ?? [])
+          .filter((f) => f.name.startsWith(opts.prefix))
+          .map((f) => ({
+            name: f.name,
+            download: async () => [f.contents],
+            delete: async () => {
+              deletedFiles.push(f.name)
+            }
+          }))
+      ]
+    },
+    deleteFiles: async (opts: Record<string, unknown>) => {
+      deleteFilesCalls.push({ bucket: bucketName, opts })
     }
-  }),
-  getFiles: async (opts: { prefix: string }) => {
-    if (getFilesError) throw getFilesError
-    return [
-      bucketFiles
-        .filter((f) => f.name.startsWith(opts.prefix))
-        .map((f) => ({
-          name: f.name,
-          download: async () => [f.contents],
-          delete: async () => {
-            deletedFiles.push(f.name)
-          }
-        }))
-    ]
-  },
-  deleteFiles: async (opts: Record<string, unknown>) => {
-    deleteFilesCalls.push(opts)
   }
 }
 
-const bucketSpy = spyOn(Storage.prototype, 'bucket').mockReturnValue(fakeBucket as never)
+const bucketSpy = spyOn(Storage.prototype, 'bucket').mockImplementation((name) => fakeBucket(name as string) as never)
 
 const api = new UserDataAPI(db, config, logger)
 
@@ -104,7 +107,7 @@ async function seedComment(user: SeededUser, postId: number, content: string) {
 
 beforeEach(() => {
   savedZips = []
-  bucketFiles = []
+  filesByBucket = {}
   deletedFiles = []
   deleteFilesCalls = []
   getFilesError = undefined
@@ -141,7 +144,7 @@ afterAll(async () => {
 })
 
 describe('downloadUserData', () => {
-  test('zips profile, posts (with audience), comments, and images, and returns the bucket URL', async () => {
+  test('zips profile, posts (with audience), comments, and images, and returns the download-route URL', async () => {
     const user = await seedUser('dl')
     const post = await seedPost(user, 'first post')
     await db
@@ -149,16 +152,18 @@ describe('downloadUserData', () => {
       .values({ postId: post.id, postUid: post.uid, userId: user.id, userUid: user.uid, type: 'favorites' })
       .execute()
     const comment = await seedComment(user, post.id, 'my comment')
-    bucketFiles = [{ name: `${user.uid}/profile-abc.jpg`, contents: Buffer.from([1, 2, 3, 4]) }]
+    // images live in the image bucket — the export must list them there, not in the data bucket
+    filesByBucket = { [config.buckets.image]: [{ name: `${user.uid}/profile-abc.jpg`, contents: Buffer.from([1, 2, 3, 4]) }] }
 
     const url = await api.downloadUserData(user.uid)
 
     expect(savedZips.length).toBe(1)
+    expect(savedZips[0].bucket).toBe(config.buckets.data)
     const dateStamp = DateFns.format(new Date(), 'yyyy-MM-dd')
     // the path carries a random token so export URLs are not enumerable from the public uid + date
     expect(savedZips[0].path).toMatch(new RegExp(`^user_data/dt=${dateStamp}/[^/]{32}_${user.uid}_data\\.zip$`))
-    // the full base (including the bucket path segment) is preserved even without a trailing slash
-    expect(url).toBe(`${config.baseImageUrl.replace(/\/$/, '')}/${savedZips[0].path}`)
+    // the bucket is private, so the URL points at the authenticated app download route
+    expect(url).toBe(`${config.baseLinkUrl.replace(/\/$/, '')}/user/data/${savedZips[0].path}`)
 
     const entries = unzipSync(new Uint8Array(savedZips[0].data))
     expect(Object.keys(entries).sort()).toEqual(['comments.ndjson', 'images/profile-abc.jpg', 'posts.ndjson', 'profile.json'])
@@ -190,10 +195,12 @@ describe('downloadUserData', () => {
   test('more images than the download concurrency all land in the zip (chunk boundary math)', async () => {
     const user = await seedUser('dlmany')
     // 9 images = two full chunks of IMAGE_DOWNLOAD_CONCURRENCY (4) plus a partial final chunk
-    bucketFiles = Array.from({ length: 9 }, (_, i) => ({
-      name: `${user.uid}/photo-${i}.jpg`,
-      contents: Buffer.from([i])
-    }))
+    filesByBucket = {
+      [config.buckets.image]: Array.from({ length: 9 }, (_, i) => ({
+        name: `${user.uid}/photo-${i}.jpg`,
+        contents: Buffer.from([i])
+      }))
+    }
 
     await api.downloadUserData(user.uid)
 
@@ -214,7 +221,9 @@ describe('downloadUserData', () => {
   test('a second export on the same day is rejected', async () => {
     const user = await seedUser('dlagain')
     const dateStamp = DateFns.format(new Date(), 'yyyy-MM-dd')
-    bucketFiles = [{ name: `user_data/dt=${dateStamp}/sometoken_${user.uid}_data.zip`, contents: Buffer.alloc(0) }]
+    filesByBucket = {
+      [config.buckets.data]: [{ name: `user_data/dt=${dateStamp}/sometoken_${user.uid}_data.zip`, contents: Buffer.alloc(0) }]
+    }
     const err = await api.downloadUserData(user.uid).catch((e) => e)
     expect(err).toBeInstanceOf(UserDataError)
     expect((err as UserDataError).errors.export).toEqual(['You already exported your data today. You can only do it once a day.'])
@@ -223,11 +232,13 @@ describe('downloadUserData', () => {
 
   test('older exports — including legacy predictable paths — are deleted; other users’ are kept', async () => {
     const user = await seedUser('dlclean')
-    bucketFiles = [
-      { name: `user_data/dt=2020-01-01/${user.uid}_data.zip`, contents: Buffer.alloc(0) },
-      { name: `user_data/dt=2020-01-02/oldtoken_${user.uid}_data.zip`, contents: Buffer.alloc(0) },
-      { name: `user_data/dt=2020-01-02/othertoken_someone-else_data.zip`, contents: Buffer.alloc(0) }
-    ]
+    filesByBucket = {
+      [config.buckets.data]: [
+        { name: `user_data/dt=2020-01-01/${user.uid}_data.zip`, contents: Buffer.alloc(0) },
+        { name: `user_data/dt=2020-01-02/oldtoken_${user.uid}_data.zip`, contents: Buffer.alloc(0) },
+        { name: `user_data/dt=2020-01-02/othertoken_someone-else_data.zip`, contents: Buffer.alloc(0) }
+      ]
+    }
 
     await api.downloadUserData(user.uid)
 
@@ -318,10 +329,13 @@ describe('deleteUserData', () => {
     expect(await db.selectFrom('accountValidationTokens').select('id').where('userId', '=', target.id).execute()).toEqual([])
     expect(await db.selectFrom('passwordRecoveryTokens').select('id').where('userId', '=', target.id).execute()).toEqual([])
 
-    // images and prior export zips are removed after the DB commit
+    // images (image bucket) and prior export zips (data bucket) are removed after the DB commit
     expect(deleteFilesCalls).toEqual([
-      { prefix: `${target.uid}/`, force: true },
-      { prefix: 'user_data/', matchGlob: `user_data/dt=*/*${target.uid}_data.zip`, force: true }
+      { bucket: config.buckets.image, opts: { prefix: `${target.uid}/`, force: true } },
+      {
+        bucket: config.buckets.data,
+        opts: { prefix: 'user_data/', matchGlob: `user_data/dt=*/*${target.uid}_data.zip`, force: true }
+      }
     ])
   })
 

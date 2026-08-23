@@ -87,7 +87,7 @@ export default class ImagesAPI {
     this.logger = _logger.child({ module: 'ImagesAPI' })
     this.storage = new Storage()
     this.vision = new Vision.ImageAnnotatorClient()
-    this.imageBucket = config.imageBucket
+    this.imageBucket = config.buckets.image
     // new URL(path, base) replaces the last segment of a base without a trailing slash,
     // which would silently drop the bucket path from returned URLs
     this.baseImageUrl = config.baseImageUrl.endsWith('/') ? config.baseImageUrl : `${config.baseImageUrl}/`

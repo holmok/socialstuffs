@@ -402,6 +402,32 @@ export default function UserRoutes(app: Hono, logger: Logger) {
     })
   })
 
+  // export objects live at user_data/dt=<date>/<token>_<uid>_data.zip in the private data
+  // bucket; strict segment shapes keep decoded params from smuggling path separators or `..`
+  const exportDatePattern = /^dt=\d{4}-\d{2}-\d{2}$/
+  const exportFilePattern = /^[\w-]+_data\.zip$/
+
+  user.get('/data/user_data/:dt/:file', async (c) => {
+    const { auth, api } = c.var
+    const uid = auth.user?.uid
+    if (uid == null) throw new HTTPException(401) // this should never happen due to the authorize middleware
+
+    const { dt, file } = c.req.param()
+    // wrong shape, someone else's uid, and a missing object all 404 identically
+    if (!exportDatePattern.test(dt) || !exportFilePattern.test(file) || !file.endsWith(`_${uid}_data.zip`)) {
+      throw new HTTPException(404, { message: 'Export not found' })
+    }
+    const exportFile = await api.userData.getExportStream(uid, `user_data/${dt}/${file}`)
+    if (exportFile == null) throw new HTTPException(404, { message: 'Export not found' })
+
+    return c.body(exportFile.stream, 200, {
+      'Content-Type': 'application/zip',
+      'Content-Length': String(exportFile.size),
+      'Content-Disposition': `attachment; filename="socialstuffs-data-${dt.slice(3)}.zip"`,
+      'Cache-Control': 'no-store'
+    })
+  })
+
   user.post('/data/export', async (c) => {
     const { logger, flash, auth, db, api } = c.var
     const user = await auth.getUser()

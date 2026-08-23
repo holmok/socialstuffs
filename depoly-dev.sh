@@ -13,7 +13,7 @@ docker buildx build --platform linux/amd64 -t "${IMAGE}:${TAG}" -t "${IMAGE}:lat
 
 echo "Pushed ${IMAGE}:${TAG} and ${IMAGE}:latest, now deploying to Cloud Run."
 
-gcloud run deploy dev-website-run \
+gcloud run deploy dev-website-service \
   --image us-central1-docker.pkg.dev/socialstuffs/dev-website/socialstuffs:latest \
   --region us-central1 \
   --project socialstuffs
