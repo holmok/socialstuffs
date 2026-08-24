@@ -42,7 +42,7 @@ FROM_EMAIL=no-reply@example.com
 # Base URL used to build the links inside those emails (required)
 BASE_LINK_URL=http://localhost:3000
 
-# ── Images & moderation (required) ───────────────────────────────────────────
+# ── Images, moderation & data (required) ─────────────────────────────────────
 # Google Cloud Storage bucket that uploaded images (posts, avatars) land in.
 # The Google clients — Storage, Vision SafeSearch (image moderation), and
 # Natural Language (text moderation) — authenticate via Application Default
@@ -51,6 +51,9 @@ BASE_LINK_URL=http://localhost:3000
 IMAGE_BUCKET=your-gcs-bucket
 # Public base URL images are served from (required)
 BASE_IMAGE_URL=https://storage.googleapis.com/your-gcs-bucket
+# GCS bucket where own-data export zips ("download my data") are written,
+# under user_data/dt=<date>/ (required; may be the same bucket as IMAGE_BUCKET)
+DATA_BUCKET=your-gcs-bucket
 # GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 
 # ── Auth & cookies (required) ────────────────────────────────────────────────

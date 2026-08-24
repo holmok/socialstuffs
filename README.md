@@ -6,7 +6,7 @@ A server-rendered social app built with [Bun](https://bun.sh), [Hono](https://ho
 
 - Bun
 - A Postgres database (schema managed by the migrations in `migrations/`)
-- Google Cloud Application Default Credentials — Natural Language (text moderation), Vision SafeSearch (image moderation), and a Cloud Storage bucket for uploaded images
+- Google Cloud Application Default Credentials — Natural Language (text moderation), Vision SafeSearch (image moderation), and Cloud Storage buckets for uploaded images and own-data export zips
 - A [Postmark](https://postmarkapp.com) server token (transactional email)
 - An [Axiom](https://axiom.co) dataset + token (production logging only)
 
@@ -24,7 +24,7 @@ Copy the documented example env file and fill in your values (`.env` is gitignor
 cp .example_env .env
 ```
 
-`.example_env` documents every variable: required ones (`DATABASE_URL`, `DATABASE_SCHEMA`, `PORT`, `HOST`, `NODE_ENV`, `TRUST_PROXY`, `LOG_NAME`, `AXIOM_DATASET`/`AXIOM_TOKEN`, `POSTMARK_TOKEN`/`FROM_EMAIL`, `BASE_LINK_URL`, `IMAGE_BUCKET`, `BASE_IMAGE_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `COOKIE_NAME_USER`/`COOKIE_NAME_SESSION`) and the optional ones with defaults (`LOG_LEVEL`, `DATABASE_MIN_CLIENTS`/`DATABASE_MAX_CLIENTS`).
+`.example_env` documents every variable: required ones (`DATABASE_URL`, `DATABASE_SCHEMA`, `PORT`, `HOST`, `NODE_ENV`, `TRUST_PROXY`, `LOG_NAME`, `AXIOM_DATASET`/`AXIOM_TOKEN`, `POSTMARK_TOKEN`/`FROM_EMAIL`, `BASE_LINK_URL`, `IMAGE_BUCKET`, `BASE_IMAGE_URL`, `DATA_BUCKET`, `JWT_SECRET`, `COOKIE_SECRET`, `COOKIE_NAME_USER`/`COOKIE_NAME_SESSION`) and the optional ones with defaults (`LOG_LEVEL`, `DATABASE_MIN_CLIENTS`/`DATABASE_MAX_CLIENTS`).
 
 Create/update the database schema:
 
@@ -52,6 +52,17 @@ bun run test:coverage  # bun test --coverage — report-only coverage (text tabl
 There is no build step; Bun runs the TypeScript directly. Tests live next to the code they cover (e.g. `server/routes/sign-up-flow.test.ts`) and seed uniquely-suffixed rows they clean up afterward.
 
 Dev-only fake data: `bun run scripts/seed-fake-data.ts` creates a dozen fake users (all with password `Password123!`) plus posts, comments, relations, and favorites, recording everything in `scripts/seeded-data.json`; `bun run scripts/unseed-fake-data.ts` hard-deletes it all again. The seeds write directly through Kysely, so no Google credentials are needed.
+
+## Deployment
+
+The app ships as a Docker image (`Dockerfile` — `oven/bun:1-slim`, production dependencies only, no build step) and runs on Google Cloud Run:
+
+```sh
+./deploy-dev.sh     # build + push + deploy the dev environment
+./deploy-prod.sh    # build + push + deploy production
+```
+
+Each script builds a `linux/amd64` image, pushes it to Artifact Registry (a timestamp tag plus `latest`), and runs `gcloud run deploy` for the matching Cloud Run service (`dev-website-service` / `prod-website-service`, region `us-central1`). Unauthenticated probe endpoints for the platform: `GET /liveness` and `GET /start-up` (which also checks database connectivity).
 
 ## Project layout
 
